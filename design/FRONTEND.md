@@ -90,4 +90,4 @@ Docs (replaces the earlier How it works page; `/how` redirects here)
 - Signing through NEAR Wallet Selector.
 - Loan details go into the round's `loan` string as JSON `{"borrower","facility","maturity"}`;
   plain strings still display.
-- Demo data mode (`?demo=1`) fills every state while testnet FastFS is down.
+- Demo data mode (`?demo=1`) fills every state, so each screen can be seen without running a round.

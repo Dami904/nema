@@ -2,12 +2,12 @@
 
 Quiet consensus. Funds agree on a price without showing each other their numbers.
 
-> Status: early. The first contract build is deployed and initialized on NEAR
-> testnet, and the first enclave build is registered on OutLayer. A second build
-> of both (free reads for funds, applications, auditors) is written and tested
-> but not deployed yet. No round has run end to end. The web app reads the live
-> contract and signs calls through NEAR wallets; no call from it has been sent
-> on chain yet.
+> Status: deployed on NEAR testnet, not yet run end to end. The contract
+> (sha256 `cb1bd089…69d4`) is live on `nema-dev.testnet` with 4 panel funds, and
+> the enclave (sha256 `3ed58517…50d6`, the
+> [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release
+> of this repository) is the active version of the OutLayer project
+> `nema-dev.testnet/nema-aggregator`. No round has been run yet.
 
 ## The problem
 
@@ -34,10 +34,10 @@ submitted, not a copy the fund could edit) and test them against the consensus.
 
 | Part | State |
 | --- | --- |
-| `aggregator/` enclave module (round keys, decrypt, tally, sealed delivery, audit) | Written, 32 tests passing, builds to `wasm32-wasip2` (about 461 KB, sha256 `841b469e…e86e`) |
-| `contract/` NEAR contract (members, applications, rounds, committed set, listings, paid and free reads, audits, refunds, earnings, state migration) | Written, 80 unit tests passing. The first build is live on `nema-dev.testnet` with 4 panel funds; the new build (sha256 `cb1bd089…69d4`) is not deployed yet |
+| `aggregator/` enclave module (round keys, decrypt, tally, sealed delivery, audit) | Written, 32 tests passing, builds to `wasm32-wasip2` (about 461 KB, sha256 `3ed58517…50d6` with Rust 1.96; the same bytes from a fresh clone) |
+| `contract/` NEAR contract (members, applications, rounds, committed set, listings, paid and free reads, audits, refunds, earnings, state migration) | Written, 80 unit tests passing. Live on `nema-dev.testnet` (sha256 `cb1bd089…69d4`) with 4 panel funds |
 | `interop/` browser encryption (eciesjs) against the enclave | Verified in both directions |
-| OutLayer testnet | Enclave project and master secret registered; waiting on testnet FastFS to serve the wasm |
+| OutLayer testnet | Project `nema-dev.testnet/nema-aggregator` runs the enclave from this repository's `enclave-v2` release, checked by hash. The master secret is generated inside OutLayer's TEE and released only to `nema-dev.testnet` running that exact hash |
 | `web/` app (Vite, React) | Seven pages on the live contract (including Docs and an auditor's desk), sample data for every state, wallet sign-in (Meteor, MyNearWallet, HERE), marks sealed in the browser, reads opened with a key kept on the device, a borrowing-base tool and price history per loan |
 | Lender portfolio and export | `/portfolio` totals the borrowing base across every loan an account has opened, flags prices that fell since the last read, and exports CSV or prints to PDF. Each round's result exports as CSV with the salt and commitment, so the file can be checked without the app. Inputs stay on the device |
 | Fund track record | A fund's Vault charts each of its marks against the consensus, round by round: how often it sat within one spread, its average gap and its lean. The fund sees it from marks kept on its device; its auditor sees the same from marks the enclave opened for it. No one else can |
