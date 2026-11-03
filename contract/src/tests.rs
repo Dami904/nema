@@ -180,6 +180,26 @@ fn round_waits_for_its_key_then_opens() {
 }
 
 #[test]
+fn a_round_that_never_got_its_key_can_be_ended_after_its_deadline() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    close(&mut c);
+    assert_eq!(status(&c), RoundStatus::Failed);
+    assert!(c.get_round(U64(1)).unwrap().last_error.unwrap().contains("never received its key"));
+}
+
+#[test]
+#[should_panic(expected = "still open")]
+fn a_keyless_round_cannot_be_ended_early() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    testing_env!(ctx(&accounts(1), DEPOSIT, 500));
+    let _ = c.close_round(1);
+}
+
+#[test]
 fn malformed_key_fails_the_round() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
@@ -673,11 +693,12 @@ fn withdrawing_nothing_is_refused() {
 
 #[test]
 fn outcome_maps_enclave_responses() {
-    let ok = OutLayerResponse { success: true, result: json!({"a": 1}), error: None };
-    assert_eq!(outcome(Ok(Some(ok))).unwrap(), json!({"a": 1}));
-    let bad = OutLayerResponse { success: false, result: Value::Null, error: Some("nope".into()) };
-    assert_eq!(outcome(Ok(Some(bad))).unwrap_err(), "nope");
-    assert!(outcome(Ok(None)).is_err());
+    // What OutLayer returned for a real derive_pubkey run on testnet.
+    let raw = br#"{"ok":true,"pubkey":"02b1c1743d18209603217ed407c1320dc3948cfb163339a1d3f0f374da3b651a3f"}"#;
+    let v: Value = serde_json::from_slice(raw).unwrap();
+    assert_eq!(outcome(Ok(v.clone())).unwrap(), v);
+    let failed: Value = serde_json::from_slice(b"null").unwrap();
+    assert!(outcome(Ok(failed)).is_err());
     assert!(outcome(Err(PromiseError::Failed)).is_err());
 }
 

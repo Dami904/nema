@@ -14,7 +14,7 @@ export const REPO_URL = (env.VITE_REPO_URL as string | undefined) ?? "";
 
 /** Builds we expect on chain, so the Docs page can compare them. */
 export const BUILDS = {
-  contractWasmSha256: "cb1bd089682b0837ae5faf806f30362e1117e4659c3f94a0c5618bcf4bb569d4",
+  contractWasmSha256: "1820d2114b0f576bc811f418f7e07a046a1aa7a4b6035b4cf6e4b494253abfa2",
   enclaveWasmSha256: "3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6",
   enclaveProject: "nema-dev.testnet/nema-aggregator",
 };

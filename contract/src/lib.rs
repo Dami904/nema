@@ -256,14 +256,6 @@ pub struct Appointment {
     pub since: U64,
 }
 
-/// OutLayer's response wrapper.
-#[near(serializers = [json])]
-pub struct OutLayerResponse {
-    pub success: bool,
-    pub result: Value,
-    pub error: Option<String>,
-}
-
 #[near(serializers = [json])]
 struct KeyOut {
     ok: Option<bool>,
@@ -578,10 +570,20 @@ impl Nema {
             .get_mut(&round_id)
             .unwrap_or_else(|| env::panic_str("no such round"));
         require!(
-            round.status == RoundStatus::Open || round.status == RoundStatus::CloseFailed,
+            matches!(round.status, RoundStatus::Open | RoundStatus::CloseFailed | RoundStatus::AwaitingKey),
             "the round cannot be closed in its current state"
         );
         require!(now >= round.closes_at, "the round is still open");
+
+        // A round whose key never arrived took no marks; past its deadline it is
+        // simply ended, so it cannot sit in AwaitingKey forever.
+        if round.status == RoundStatus::AwaitingKey {
+            round.status = RoundStatus::Failed;
+            round.last_error = Some("the round never received its key from the enclave".into());
+            return PromiseOrValue::Promise(
+                Promise::new(caller).transfer(NearToken::from_yoctonear(attached)),
+            );
+        }
 
         if round.submissions.len() < min {
             round.status = RoundStatus::Failed;
@@ -746,7 +748,7 @@ impl Nema {
     pub fn on_round_key(
         &mut self,
         round_id: u64,
-        #[callback_result] result: Result<Option<OutLayerResponse>, PromiseError>,
+        #[callback_result] result: Result<Value, PromiseError>,
     ) {
         self.apply_round_key(round_id, outcome(result));
     }
@@ -755,7 +757,7 @@ impl Nema {
     pub fn on_tally(
         &mut self,
         round_id: u64,
-        #[callback_result] result: Result<Option<OutLayerResponse>, PromiseError>,
+        #[callback_result] result: Result<Value, PromiseError>,
     ) {
         self.apply_tally(round_id, outcome(result));
     }
@@ -764,7 +766,7 @@ impl Nema {
     pub fn on_deliver(
         &mut self,
         purchase_id: u64,
-        #[callback_result] result: Result<Option<OutLayerResponse>, PromiseError>,
+        #[callback_result] result: Result<Value, PromiseError>,
     ) {
         self.apply_delivery(purchase_id, outcome(result));
     }
@@ -773,7 +775,7 @@ impl Nema {
     pub fn on_audit(
         &mut self,
         audit_id: u64,
-        #[callback_result] result: Result<Option<OutLayerResponse>, PromiseError>,
+        #[callback_result] result: Result<Value, PromiseError>,
     ) {
         self.apply_audit(audit_id, outcome(result));
     }
@@ -1168,11 +1170,13 @@ fn clip(mut s: String) -> String {
     s
 }
 
-fn outcome(r: Result<Option<OutLayerResponse>, PromiseError>) -> Result<Value, String> {
+/// OutLayer hands back the enclave's own JSON output, or `null` when the run
+/// failed or produced nothing. Any JSON parses as a `Value`, so the callback
+/// itself never fails to deserialize.
+fn outcome(r: Result<Value, PromiseError>) -> Result<Value, String> {
     match r {
-        Ok(Some(resp)) if resp.success => Ok(resp.result),
-        Ok(Some(resp)) => Err(resp.error.unwrap_or_else(|| "the enclave reported a failure".into())),
-        Ok(None) => Err("the enclave returned nothing".into()),
+        Ok(Value::Null) => Err("the enclave run failed or returned nothing".into()),
+        Ok(v) => Ok(v),
         Err(e) => Err(format!("the enclave call failed: {e:?}")),
     }
 }

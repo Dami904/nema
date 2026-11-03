@@ -3,7 +3,7 @@
 Quiet consensus. Funds agree on a price without showing each other their numbers.
 
 > Status: deployed on NEAR testnet, not yet run end to end. The contract
-> (sha256 `cb1bd089…69d4`) is live on `nema-dev.testnet` with 4 panel funds, and
+> (sha256 `1820d211…bfa2`) is live on `nema-dev.testnet` with 4 panel funds, and
 > the enclave (sha256 `3ed58517…50d6`, the
 > [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release
 > of this repository) is the active version of the OutLayer project
@@ -35,7 +35,7 @@ submitted, not a copy the fund could edit) and test them against the consensus.
 | Part | State |
 | --- | --- |
 | `aggregator/` enclave module (round keys, decrypt, tally, sealed delivery, audit) | Written, 32 tests passing, builds to `wasm32-wasip2` (about 461 KB, sha256 `3ed58517…50d6` with Rust 1.96; the same bytes from a fresh clone) |
-| `contract/` NEAR contract (members, applications, rounds, committed set, listings, paid and free reads, audits, refunds, earnings, state migration) | Written, 80 unit tests passing. Live on `nema-dev.testnet` (sha256 `cb1bd089…69d4`) with 4 panel funds |
+| `contract/` NEAR contract (members, applications, rounds, committed set, listings, paid and free reads, audits, refunds, earnings, state migration) | Written, 82 unit tests passing. Live on `nema-dev.testnet` (sha256 `1820d211…bfa2`) with 4 panel funds |
 | `interop/` browser encryption (eciesjs) against the enclave | Verified in both directions |
 | OutLayer testnet | Project `nema-dev.testnet/nema-aggregator` runs the enclave from this repository's `enclave-v2` release, checked by hash. The master secret is generated inside OutLayer's TEE and released only to `nema-dev.testnet` running that exact hash |
 | `web/` app (Vite, React) | Seven pages on the live contract (including Docs and an auditor's desk), sample data for every state, wallet sign-in (Meteor, MyNearWallet, HERE), marks sealed in the browser, reads opened with a key kept on the device, a borrowing-base tool and price history per loan |
