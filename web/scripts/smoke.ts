@@ -6,6 +6,9 @@
 //   npm run smoke -- --owner nema-dev.testnet --funds fund1.nema-dev.testnet,fund2...,fund3...,fund4... \
 //                    --lender lender.nema-dev.testnet --minutes 4
 //
+// Add --round <id> to pick up a round this script already opened and published
+// (its marks are the ones below) and run only the reads, fees and audit.
+//
 // Costs about 0.06 NEAR in enclave fees, 0.06 NEAR in storage deposits kept by
 // the contract, and one read price paid by the lender.
 
@@ -22,6 +25,7 @@ const owner = arg("owner", CONFIG.contract);
 const funds = arg("funds", [1, 2, 3, 4].map((n) => `fund${n}.${CONFIG.contract}`).join(",")).split(",");
 const lender = arg("lender", `lender.${CONFIG.contract}`);
 const minutes = Number(arg("minutes", "4"));
+const resume = arg("round", "");
 /** Marks in hundredths; the enclave's exact result is recomputed below. */
 const MARKS = [9410, 9525, 9180, 9655, 9300, 9440].slice(0, funds.length);
 
@@ -59,6 +63,12 @@ const members = await view<string[]>("get_members");
 check(`all ${funds.length} funds are on the panel`, funds.every((f) => members.includes(f)));
 if (funds.length < config.min_contributors) throw new Error(`need at least ${config.min_contributors} funds`);
 
+let id: string;
+let subs: Submission[];
+if (resume) {
+  id = resume;
+  subs = await view<Submission[]>("get_submissions", { round_id: id });
+} else {
 // ---- open ----
 const before = new Set((await allRounds()).map((r) => r.id));
 const closesAt = BigInt(Date.now() + minutes * 60_000) * 1_000_000n;
@@ -67,14 +77,14 @@ const closesAt = BigInt(Date.now() + minutes * 60_000) * 1_000_000n;
 const loan = encodeLoan({ borrower: "Smoke Test Co", facility: `Term loan ${Date.now().toString(36)}`, maturity: "2030-12-31" });
 call(owner, "open_round", { loan, closes_at: closesAt.toString() }, ENCLAVE_FEE_YOCTO, 300);
 const created = await until("the new round", async () => (await allRounds()).find((r) => !before.has(r.id) && r.loan === loan), (r) => !!r, 60_000);
-const id = created!.id;
+id = created!.id;
 const open = await until("the round key", () => view<Round | null>("get_round", { round_id: id }), (r) => !!r && r.status !== "AwaitingKey", 180_000);
 check("the enclave made the round key", open!.status === "Open" && !!open!.pubkey, open!.last_error ?? "");
 if (open!.status !== "Open") process.exit(1);
 
 // ---- submit ----
 for (const [i, f] of funds.entries()) call(f, "submit", { round_id: Number(id), ciphertext_hex: sealMark(open!.pubkey!, f, MARKS[i]) });
-const subs = await view<Submission[]>("get_submissions", { round_id: id });
+subs = await view<Submission[]>("get_submissions", { round_id: id });
 check("every fund's sealed mark is stored", subs.length === funds.length);
 const onChain = JSON.stringify(subs);
 check("no mark is stored in the clear", MARKS.every((m) => !onChain.includes(String(m))) && !onChain.includes('"mark"'));
@@ -86,6 +96,7 @@ if (wait > 0) {
   await sleep(wait);
 }
 call(funds[0], "close_round", { round_id: Number(id) }, ENCLAVE_FEE_YOCTO, 300);
+}
 const done = await until("the tally", () => view<Round>("get_round", { round_id: id }), (r) => r.status !== "Closing");
 check("the round published", done.status === "Published", done.last_error ?? "");
 if (done.status !== "Published" || !done.listing) process.exit(1);

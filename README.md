@@ -2,12 +2,14 @@
 
 Quiet consensus. Funds agree on a price without showing each other their numbers.
 
-> Status: deployed on NEAR testnet, not yet run end to end. The contract
+> Status: live on NEAR testnet and run end to end. The contract
 > (sha256 `1820d211…bfa2`) is live on `nema-dev.testnet` with 4 panel funds, and
 > the enclave (sha256 `3ed58517…50d6`, the
 > [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release
 > of this repository) is the active version of the OutLayer project
-> `nema-dev.testnet/nema-aggregator`. No round has been run yet.
+> `nema-dev.testnet/nema-aggregator`. Round 2 ran in full on 2026-11-03: four
+> sealed marks, the enclave tally, a free copy for a fund, a paid read for a
+> lender with the fee split four ways, and an audit, all 17 smoke checks passing.
 
 ## The problem
 
@@ -42,7 +44,7 @@ submitted, not a copy the fund could edit) and test them against the consensus.
 | Lender portfolio and export | `/portfolio` totals the borrowing base across every loan an account has opened, flags prices that fell since the last read, and exports CSV or prints to PDF. Each round's result exports as CSV with the salt and commitment, so the file can be checked without the app. Inputs stay on the device |
 | Fund track record | A fund's Vault charts each of its marks against the consensus, round by round: how often it sat within one spread, its average gap and its lean. The fund sees it from marks kept on its device; its auditor sees the same from marks the enclave opened for it. No one else can |
 | Enclave proofs | Each round's Verify view fetches OutLayer's Intel TDX quote for every enclave run behind it and checks it in the browser: Intel's certificate chain to a pinned root, the task hash in the quote, the worker image on OutLayer's approved list, Nema's build hash, the requesting contract and the result on chain. `npm run check-attest` runs the same checks on any OutLayer job; tested on real mainnet and testnet runs |
-| `web/scripts/` | `npm run smoke` runs one full round on the live network and checks it end to end (not run yet); `npm run close-rounds` closes rounds past their deadline |
+| `web/scripts/` | `npm run smoke` runs one full round on the live network and checks it end to end (passed on round 2); `npm run close-rounds` closes rounds past their deadline |
 
 ## Try it in two minutes
 
