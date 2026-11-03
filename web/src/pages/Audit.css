@@ -1,0 +1,17 @@
+.audit-client { padding-top: 40px; }
+.audit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.audit-grid .card + .card { margin-top: 0; }
+.audit-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.audit-head .plain { text-decoration: none; }
+.audit-figs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0 8px; }
+.audit-figs dt { font-size: 12px; color: var(--faint); }
+.audit-figs dd { font: 600 26px/1.15 var(--sans); letter-spacing: -0.02em; margin-top: 4px; }
+.audit-figs dd.in { color: var(--sage-ink); }
+.audit-figs dd.out { color: var(--clay-ink); }
+.audit-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+@media (max-width: 860px) {
+  .audit-grid { grid-template-columns: 1fr; }
+  .audit-figs dd { font-size: 22px; }
+}
+.audit-record { margin-bottom: 16px; }

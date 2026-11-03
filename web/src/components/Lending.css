@@ -1,0 +1,30 @@
+.history { margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--hair); }
+.history figcaption { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.history figcaption .hint { font-size: 13px; }
+.history svg { width: 100%; height: auto; display: block; margin-top: 8px; overflow: visible; }
+.history .band { fill: var(--mist); }
+.history .line { fill: none; stroke: var(--sage-ink); stroke-width: 1.5; }
+.history .dot { fill: var(--card); stroke: var(--sage-ink); stroke-width: 1.5; }
+.history .now { fill: var(--clay); }
+.history text { font: 500 9px var(--sans); fill: var(--faint); letter-spacing: 0.06em; }
+
+.bbase { margin-top: 18px; border: 1px solid var(--hair); border-radius: 18px; background: var(--linen); }
+.bbase summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; }
+.bbase summary::-webkit-details-marker { display: none; }
+.bbase summary > span:first-child { display: grid; gap: 4px; }
+.bbase summary .hint { font-size: 13px; }
+.bbase summary > span[aria-hidden] { color: var(--faint); font-size: 20px; transition: transform 0.2s; }
+.bbase[open] summary > span[aria-hidden] { transform: rotate(45deg); }
+.bbase-in { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 0 16px; }
+.bbase-in label { display: grid; gap: 6px; font-size: 12px; color: var(--soft); }
+.bbase-in input { height: 40px; border-radius: 12px; border: 1px solid var(--hair-2); background: var(--card); padding: 0 10px; font-size: 14px; min-width: 0; }
+.bbase-in input:focus { outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px var(--mist); }
+.bbase-out { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 16px; }
+.bbase-out dt { font-size: 12px; color: var(--faint); }
+.bbase-out dd { font: 600 20px/1.15 var(--sans); letter-spacing: -0.02em; margin-top: 4px; }
+.bbase-out dd small { display: block; font: 400 11px var(--sans); color: var(--faint); margin-top: 2px; }
+.bbase > .hint { padding: 0 16px 16px; font-size: 13px; }
+
+@media (max-width: 560px) {
+  .bbase-in, .bbase-out { grid-template-columns: 1fr; }
+}

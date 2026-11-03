@@ -1,0 +1,178 @@
+:root {
+  --linen: #f3efe7;
+  --card: #fbf9f4;
+  --hair: #e4ded3;
+  --hair-2: #cfc7b8;
+  --ink: #1c2420;
+  --soft: #5c6660;
+  --faint: #8a918b;
+  --sage: #6e8f7e;
+  --sage-ink: #2f5242;
+  --mist: #dce5df;
+  --forest: #1e2b25;
+  --forest-text: #e8ede9;
+  --forest-soft: #a9bab0;
+  --clay: #b5764f;
+  --clay-bg: #efe3d6;
+  --clay-ink: #7a4a2c;
+  --slate-bg: #e6e9ef;
+  --slate-ink: #3e4c63;
+  --rose-bg: #f3e1dc;
+  --rose-ink: #8a3b2a;
+  --serif: "Instrument Serif", Georgia, serif;
+  --sans: Inter, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --r-card: 24px;
+}
+
+* { box-sizing: border-box; margin: 0; }
+html { scroll-behavior: smooth; }
+body { background: var(--linen); color: var(--ink); font: 400 15px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+/* Working pages use plain type; the serif is kept for the logo and for pages
+   marked .display (the landing page, the top of the docs). */
+h1, h2, h3 { font-family: var(--sans); font-weight: 600; letter-spacing: -0.025em; line-height: 1.12; }
+h1 em, h2 em, h3 em { font-style: normal; font-weight: 400; }
+body { font-variant-numeric: tabular-nums; }
+em { font-style: italic; }
+::selection { background: var(--mist); }
+:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; border-radius: 6px; }
+
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 32px; }
+.eyebrow { font: 500 11px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--clay); }
+.label { font: 500 11px/1.3 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.mono { font-family: var(--mono); font-size: 12px; color: var(--soft); word-break: break-all; }
+.muted { color: var(--soft); }
+.hint { color: var(--faint); font-size: 14px; }
+/* Figures: plain, aligned digits. */
+.serif { font-family: var(--sans); font-weight: 500; letter-spacing: -0.02em; }
+.display h1, .display h2, .display h3, .display .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -0.01em; line-height: 1.05; }
+.display h1 em, .display h2 em, .display h3 em { font-style: italic; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; padding: 0 20px; border-radius: 999px;
+  font: 500 14px var(--sans); border: 1px solid var(--ink); background: var(--ink); color: var(--card); cursor: pointer; text-decoration: none;
+  transition: transform 0.15s, background 0.15s; white-space: nowrap; }
+.btn:hover { background: #2c3833; }
+.btn:active { transform: scale(0.98); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--hair-2); }
+.btn.ghost:hover { background: var(--card); }
+.btn.small { height: 34px; padding: 0 14px; font-size: 13px; }
+.btn.wide { width: 100%; }
+.btn[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/1 var(--sans); padding: 7px 11px; border-radius: 999px; white-space: nowrap; }
+.pill .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tone-open { background: var(--mist); color: var(--sage-ink); }
+.tone-pub { background: var(--clay-bg); color: var(--clay-ink); }
+.tone-busy { background: var(--slate-bg); color: var(--slate-ink); }
+.tone-bad { background: var(--rose-bg); color: var(--rose-ink); }
+.tone-quiet { background: var(--linen); color: var(--soft); border: 1px solid var(--hair); }
+
+.card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-card); padding: 26px; }
+.card + .card { margin-top: 16px; }
+.grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+.page { padding-top: 56px; padding-bottom: 40px; }
+.page-head { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 32px; flex-wrap: wrap; }
+.page-head h1 { font-size: 40px; margin-top: 12px; }
+.display .page-head h1 { font-size: 56px; }
+.section { padding: 72px 0 24px; }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 26px; flex-wrap: wrap; }
+.section-head h2 { font-size: 28px; margin-top: 10px; }
+.display .section-head h2 { font-size: 44px; }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; font-size: 14px; }
+.kv dt { color: var(--faint); }
+.kv dd { text-align: right; min-width: 0; }
+
+.seg { display: inline-flex; background: var(--linen); border: 1px solid var(--hair); border-radius: 999px; padding: 4px; }
+.seg button { border: 0; background: transparent; font-size: 13px; padding: 8px 16px; border-radius: 999px; color: var(--soft); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(28, 36, 32, 0.08); }
+
+.field { display: grid; gap: 8px; }
+.field input, .field select { height: 46px; border-radius: 14px; border: 1px solid var(--hair-2); background: var(--card); padding: 0 14px; font-size: 15px; }
+.field input:focus { outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px var(--mist); }
+.field small { color: var(--faint); font-size: 13px; }
+.field .err { color: var(--rose-ink); font-size: 13px; }
+
+.empty { text-align: center; padding: 56px 24px; border: 1px dashed var(--hair-2); border-radius: var(--r-card); }
+.empty h3 { font-size: 30px; margin-bottom: 8px; }
+.empty p { color: var(--soft); max-width: 420px; margin: 0 auto 18px; }
+
+.skeleton { background: linear-gradient(90deg, #ece7dd 0%, #f5f1ea 50%, #ece7dd 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 12px; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+.blurnum { filter: blur(8px); user-select: none; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--soft); }
+.check .ok { color: var(--sage-ink); }
+.check .no { color: var(--rose-ink); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); flex: none; margin-top: 6px; }
+.dot.off { background: var(--clay); }
+
+.fadein { animation: fadein 0.5s ease both; }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+@media (max-width: 860px) {
+  .wrap { padding: 0 16px; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .page-head h1 { font-size: 42px; }
+  .section-head h2 { font-size: 36px; }
+  .card { padding: 20px; }
+}
+
+/* Wallet picker in Nema's palette, whatever the system theme. */
+html #near-wallet-selector-modal,
+html #near-wallet-selector-modal .dark-theme,
+html #near-wallet-selector-modal .light-theme {
+  --backdrop-bg: rgba(28, 36, 32, 0.32);
+  --heading-color: #1c2420;
+  --text-color: #5c6660;
+  --sidebar-border-color: #e4ded3;
+  --selected-wallet-bg: #6e8f7e;
+  --selected-wallet-bg-hover: #dce5df;
+  --wallet-option-border-color: #e4ded3;
+  --wallet-option-bg-hover: #dce5df;
+  --wallet-option-outline-color: #6e8f7e;
+  --content-bg: #fbf9f4;
+  --change-path-bg: #f3efe7;
+  --home-button-bg: #f3efe7;
+  --confirm-button-bg: #1c2420;
+  --confirm-button-bg-hover: #2c3833;
+  --close-button-bg-color: #f3efe7;
+  --close-button-fill-icon-color: #5c6660;
+  --spinner-color: #6e8f7e;
+  --bottom-section: #f3efe7;
+  --mobile-text: #1c2420;
+  --connected-green: #6e8f7e;
+  --get-wallet-option-bg-color: #f3efe7;
+  --get-wallet-option-bg-color-hover: #dce5df;
+  --get-wallet-option-border-color: #e4ded3;
+  --get-wallet-outline-color: #6e8f7e;
+  --secondary-button-bg-color: #dce5df;
+  --secondary-button-border-color: #dce5df;
+  --secondary-button-text-color: #2f5242;
+  --what-wallet-icon-color: #6e8f7e;
+  --option-wallet-bg-color: #f3efe7;
+  --option-single-wallet-bg-color: #f3efe7;
+}
+html #near-wallet-selector-modal .nws-modal { border-radius: 28px; font-family: var(--sans); }
+html #near-wallet-selector-modal .nws-modal h2,
+html #near-wallet-selector-modal .nws-modal h3 { font-family: var(--serif); font-weight: 400; }
+
+/* Printing a valuation or portfolio: just the content, on white. */
+.print-only { display: none; }
+@media print {
+  body { background: #fff; }
+  .nav, .sheet, .foot, .skip, .no-print, .seg, .toaster { display: none !important; }
+  .print-only { display: block; }
+  .card { break-inside: avoid; box-shadow: none; }
+  .page { padding-top: 0; }
+  details.bbase { display: none; }
+}

@@ -1,0 +1,20 @@
+.proof-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.proof .linkish { border: 0; background: none; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.proof .runs { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+.proof .run { border: 1px solid var(--hair); border-radius: 16px; background: var(--linen); }
+.proof .run.bad { border-color: var(--rose-ink); background: var(--rose-bg); }
+.proof .run summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; padding: 12px 16px; font-size: 14px; }
+.proof .run summary::-webkit-details-marker { display: none; }
+.proof .run[open] summary { border-bottom: 1px solid var(--hair); }
+.proof .run-job { padding: 12px 16px 4px; }
+.proof .run-job a.mono { color: var(--sage-ink); text-decoration: none; word-break: normal; }
+.proof .run-job a.mono:hover { text-decoration: underline; }
+.proof .checks { list-style: none; padding: 8px 16px 16px; margin: 0; display: grid; gap: 8px; }
+.proof .checks li { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 14px; line-height: 1.4; }
+.proof .checks small { display: block; color: var(--faint); font: 12px/1.4 var(--mono); word-break: break-word; margin-top: 2px; }
+.proof .checks .mark { font-weight: 600; text-align: center; }
+.proof .checks .ok .mark { color: var(--sage-ink); }
+.proof .checks .no .mark, .proof .checks .no { color: var(--rose-ink); }
+.proof .checks .unknown .mark { color: var(--faint); }
+.proof .proof-foot { margin-top: 14px; font-size: 13px; }

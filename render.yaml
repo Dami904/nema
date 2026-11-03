@@ -1,0 +1,17 @@
+# Render Blueprint: the web app as a static site. The contract and enclave are
+# already on NEAR and OutLayer; nothing here runs a server.
+services:
+  - type: web
+    name: nema
+    runtime: static
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    # Every page is client-side, so unknown paths load the app.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

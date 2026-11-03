@@ -1,0 +1,17 @@
+.rows { border-bottom: 1px solid var(--hair); }
+.row { display: grid; grid-template-columns: 44px auto 1fr auto auto; align-items: center; gap: 16px; padding: 18px 6px; border-top: 1px solid var(--hair);
+  text-decoration: none; transition: background 0.2s; border-radius: 4px; }
+a.row:hover { background: rgba(251, 249, 244, 0.7); }
+.row .i { font: 500 13px var(--mono); color: var(--faint); }
+.row .t { display: grid; gap: 4px; }
+.row .t h3 { font-size: 20px; line-height: 1.2; }
+.row .t h3 em { color: var(--sage); }
+.row .meta { font-size: 13px; color: var(--soft); }
+.row .lead { border-bottom: 1px dotted var(--hair-2); align-self: center; }
+
+@media (max-width: 860px) {
+  .row { grid-template-columns: 30px 1fr; row-gap: 8px; }
+  .row .lead { display: none; }
+  .row .right, .row .pill { grid-column: 2; justify-self: start; }
+  .row .t h3 { font-size: 18px; }
+}

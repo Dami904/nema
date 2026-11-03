@@ -1,0 +1,72 @@
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding: 64px 0 56px; }
+.hero h1 { font-size: 76px; line-height: 0.98; margin: 18px 0 22px; }
+.hero h1 em { color: var(--sage); }
+.lede { font-size: 17px; color: var(--soft); max-width: 440px; margin-bottom: 30px; }
+.cta { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.scatter { position: absolute; inset: 0; }
+.scatter svg { position: absolute; left: 0; right: 0; top: 30%; width: 100%; }
+.band { animation: glow 7s ease-in-out infinite; }
+@keyframes glow { 0%, 25% { opacity: 0.2; } 50%, 70% { opacity: 1; } 100% { opacity: 0.2; } }
+.sealchip { position: absolute; left: 22px; right: 22px; bottom: 22px; background: rgba(251, 249, 244, 0.84); backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); border-radius: 18px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; }
+
+.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-bottom: 72px; }
+.stat { background: var(--card); border: 1px solid var(--hair); border-radius: 20px; padding: 22px; display: grid; gap: 10px; }
+.stat b { font: 400 40px/1.05 var(--serif); }
+.stat small { color: var(--faint); font-size: 13px; }
+
+.built-on { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; padding: 22px 0 28px; border-top: 1px solid var(--hair);
+  color: var(--soft); font-size: 15px; }
+
+.uses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.use { display: grid; gap: 10px; align-content: start; text-align: left; background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-card);
+  padding: 22px; cursor: pointer; transition: transform 0.2s, border-color 0.2s; }
+.use:hover { transform: translateY(-2px); border-color: var(--hair-2); }
+.use-art { width: 100%; height: 90px; background: var(--linen); border-radius: 16px; margin-bottom: 8px; }
+.use h3 { font-size: 26px; }
+.use p { color: var(--soft); font-size: 14px; }
+.use .go { font-size: 14px; color: var(--sage-ink); margin-top: 4px; }
+
+.closer { margin-top: 88px; background: var(--forest); color: var(--forest-text); border-radius: 32px; padding: 48px; display: flex;
+  justify-content: space-between; align-items: center; gap: 28px; flex-wrap: wrap; }
+.closer h2 { font-size: 44px; }
+.closer h2 em { color: var(--forest-soft); }
+.closer p { color: var(--forest-soft); margin-top: 10px; }
+.btn.light { background: var(--card); color: var(--forest); border-color: var(--card); }
+.btn.light:hover { background: #fff; }
+.btn.ghost.dark { color: var(--forest-text); border-color: #4f6a5c; }
+.btn.ghost.dark:hover { background: #2a3a32; }
+
+.method { background: var(--forest); color: var(--forest-text); padding: 88px 0; border-radius: 36px; margin: 0 16px; }
+.method h2 { font-size: 52px; text-align: center; margin: 14px 0 10px; }
+.method .sub { text-align: center; color: var(--forest-soft); margin-bottom: 20px; }
+.method .path { width: 100%; height: 70px; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; list-style: none; padding: 0; }
+.steps .n { font: italic 52px/1 var(--serif); color: #4f6a5c; }
+.steps h3 { font: 500 13px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; margin: 14px 0 10px; }
+.steps p { color: var(--forest-soft); font-size: 14px; }
+
+.who { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.who .card { padding: 22px; }
+.who .card + .card { margin-top: 0; }
+.who-sees { font: 400 21px/1.2 var(--serif); margin: 12px 0 10px; }
+
+.faq { border-top: 1px solid var(--hair); }
+.faq details { border-bottom: 1px solid var(--hair); }
+.faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: 20px; padding: 22px 0; font: 400 24px/1.2 var(--serif); }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary span { font: 400 22px var(--sans); color: var(--faint); transition: transform 0.2s; }
+.faq details[open] summary span { transform: rotate(45deg); }
+.faq details p { color: var(--soft); max-width: 720px; padding-bottom: 22px; }
+
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; padding-top: 36px; gap: 32px; }
+  .hero h1 { font-size: 50px; }
+  .stats-row, .steps, .who, .uses { grid-template-columns: 1fr; }
+  .closer { padding: 32px 24px; }
+  .closer h2 { font-size: 34px; }
+  .method { margin: 0 8px; padding: 64px 0; border-radius: 28px; }
+  .method h2 { font-size: 40px; }
+  .faq summary { font-size: 20px; }
+}

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nema design mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --linen:#F3EFE7; --card:#FBF9F4; --hair:#E4DED3; --ink:#1C2420; --soft:#5C6660; --faint:#8E958F;
+  --sage:#6E8F7E; --mist:#DCE5DF; --forest:#1E2B25; --forest-2:#2A3A32; --clay:#B5764F;
+  --serif:"Instrument Serif",Georgia,serif; --sans:Inter,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--linen);color:var(--ink);font:400 15px/1.65 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1160px;margin:0 auto;padding:0 32px}
+.eyebrow{font:500 11px/1 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--clay)}
+.label{font:500 11px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.01em}
+em{font-style:italic}
+.mono{font-family:var(--mono);font-size:12px;color:var(--soft)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 20px;border-radius:999px;font:500 14px var(--sans);border:1px solid var(--ink);background:var(--ink);color:var(--card);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--hair)}
+.note{position:absolute;font:500 10px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--card);background:var(--clay);padding:5px 8px;border-radius:4px}
+
+/* nav: floating frosted pill */
+nav{position:sticky;top:16px;z-index:5;margin:16px auto 0;max-width:1100px;display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px 10px 22px;border-radius:999px;background:rgba(251,249,244,.72);backdrop-filter:blur(14px);border:1px solid rgba(228,222,211,.9)}
+nav .brand{font:italic 24px/1 var(--serif)}
+nav .links{display:flex;gap:4px}
+nav .links a{font-size:14px;color:var(--soft);text-decoration:none;padding:8px 14px;border-radius:999px}
+nav .links a.on{background:var(--mist);color:var(--forest)}
+
+/* hero: split, text on linen + misty hills */
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;padding:72px 0 88px}
+.hero h1{font-size:76px;line-height:.98;margin:18px 0 22px}
+.hero h1 em{color:var(--sage)}
+.hero p{font-size:17px;color:var(--soft);max-width:440px;margin-bottom:30px}
+.hills{border-radius:28px;overflow:hidden;aspect-ratio:4/4.3;background:#E9EEEA;position:relative}
+.hills svg{display:block;width:100%;height:100%}
+.sealchip{position:absolute;left:24px;bottom:24px;right:24px;background:rgba(251,249,244,.82);backdrop-filter:blur(10px);border-radius:18px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center}
+.blurnum{font:400 34px/1 var(--serif);filter:blur(7px);user-select:none}
+
+/* method band */
+.method{background:var(--forest);color:#E8EDE9;padding:88px 0;border-radius:36px;margin:0 16px}
+.method h2{font-size:52px;text-align:center;margin:14px 0 8px}
+.method .sub{text-align:center;color:#9FB2A7;margin-bottom:28px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:8px}
+.steps .n{font:italic 52px/1 var(--serif);color:#4F6A5C}
+.steps h3{font:500 13px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;margin:14px 0 10px;color:#E8EDE9}
+.steps p{color:#A9BAB0;font-size:14px}
+
+/* rounds: contents list with leaders */
+section.block{padding:96px 0 40px}
+.head{display:flex;justify-content:space-between;align-items:end;margin-bottom:28px}
+.head h2{font-size:48px;line-height:1}
+.row{display:grid;grid-template-columns:44px auto 1fr auto auto;align-items:baseline;gap:16px;padding:22px 0;border-top:1px solid var(--hair)}
+.row:last-child{border-bottom:1px solid var(--hair)}
+.row .i{font:italic 18px var(--serif);color:var(--faint)}
+.row .t{font:400 28px/1.1 var(--serif)}
+.row .lead{border-bottom:1px dotted #CFC7B8;transform:translateY(-6px)}
+.row .meta{font-size:13px;color:var(--soft)}
+.pill{font:500 12px/1 var(--sans);padding:7px 11px;border-radius:999px;white-space:nowrap}
+.p-open{background:var(--mist);color:#2F5242}
+.p-pub{background:#EFE3D6;color:#7A4A2C}
+.p-closing{background:#E6E9EF;color:#3E4C63}
+
+/* round detail: soft cards */
+.detail{display:grid;grid-template-columns:1.1fr 1fr;gap:20px;margin-top:8px}
+.card{background:var(--card);border:1px solid var(--hair);border-radius:24px;padding:26px}
+.seg{display:inline-flex;background:var(--linen);border:1px solid var(--hair);border-radius:999px;padding:4px}
+.seg span{font-size:13px;padding:8px 16px;border-radius:999px;color:var(--soft)}
+.seg span.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(28,36,32,.08)}
+.ringrow{display:flex;gap:28px;align-items:center;margin:26px 0 20px}
+.ring{width:132px;height:132px;flex:none}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;font-size:14px}
+.kv dt{color:var(--faint)} .kv dd{text-align:right}
+.funds{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.fund{display:flex;align-items:center;gap:8px;font-size:13px;background:var(--linen);border-radius:999px;padding:6px 12px 6px 6px}
+.fund i{width:20px;height:20px;border-radius:50%;background:var(--mist);display:grid;place-items:center;font:normal 11px var(--sans);color:var(--forest)}
+.sealed{background:linear-gradient(160deg,#E6ECE8,#EEF1EC);border:1px solid var(--hair);border-radius:20px;padding:22px;margin:18px 0}
+.sealed .nums{display:flex;gap:36px;margin-top:12px}
+.sealed .nums .label{margin-bottom:10px}
+.sealed .nums .blurnum{font-size:40px}
+.verify{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--soft);margin-top:14px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--sage)}
+
+/* vault: stat tiles */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.stat{background:var(--card);border:1px solid var(--hair);border-radius:20px;padding:22px}
+.stat b{display:block;font:400 40px/1.1 var(--serif);margin-top:12px}
+.stat small{color:var(--faint);font-size:13px}
+
+footer{margin-top:96px;padding:56px 0;border-top:1px solid var(--hair)}
+footer .big{font:italic 120px/1 var(--serif);color:#E2DCCF}
+
+@media (max-width:820px){
+  .hero,.detail,.steps,.stats{grid-template-columns:1fr}
+  .hero h1{font-size:52px}
+  nav .links{display:none}
+  .row{grid-template-columns:32px 1fr auto}.row .lead,.row .meta{display:none}
+  .wrap{padding:0 16px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">Nema</span>
+  <div class="links"><a class="on">Rounds</a><a>Vault</a><a>How it works</a><a>Panel</a></div>
+  <span class="btn ghost" style="height:38px">fund1.nema-dev.testnet</span>
+</nav>
+
+<div class="wrap">
+  <section class="hero">
+    <div>
+      <span class="eyebrow">Private marks for private loans</span>
+      <h1>Agree on a price.<br><em>Reveal nothing.</em></h1>
+      <p>Funds submit their marks sealed. An enclave finds the consensus. Lenders pay to read it, and the fee goes back to the funds.</p>
+      <div style="display:flex;gap:10px"><span class="btn">Browse rounds →</span><span class="btn ghost">How it works</span></div>
+    </div>
+    <div class="hills">
+      <svg viewBox="0 0 400 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <rect width="400" height="430" fill="#E7EDEA"/>
+        <circle cx="300" cy="110" r="46" fill="#F6F1E6"/>
+        <path d="M0 210 Q70 150 140 190 T280 170 T400 185 V430 H0Z" fill="#CFDCD5"/>
+        <path d="M0 255 Q90 205 170 240 T330 225 T400 235 V430 H0Z" fill="#AFC4B8"/>
+        <path d="M0 300 Q80 265 160 292 T320 280 T400 290 V430 H0Z" fill="#8AA898"/>
+        <path d="M0 350 Q100 318 200 342 T400 336 V430 H0Z" fill="#5F7F6F"/>
+        <path d="M0 395 Q120 372 230 390 T400 384 V430 H0Z" fill="#3F5A4C"/>
+      </svg>
+      <div class="sealchip">
+        <div><div class="label">Round 12 · consensus</div><div class="blurnum" style="margin-top:8px">94.10</div></div>
+        <span class="pill p-pub">Sealed</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="method">
+  <div class="wrap">
+    <div class="eyebrow" style="text-align:center">The method</div>
+    <h2>Three quiet steps</h2>
+    <p class="sub">No fund sees another's number. Nobody sees the result without paying for it.</p>
+    <svg viewBox="0 0 1000 90" style="width:100%;height:70px" aria-hidden="true">
+      <path d="M40 70 C200 -10 330 110 500 45 S800 0 960 55" fill="none" stroke="#6E8F7E" stroke-width="1.5" stroke-dasharray="3 6"/>
+      <circle cx="40" cy="70" r="5" fill="#B5764F"/><circle cx="500" cy="45" r="5" fill="#6E8F7E"/><circle cx="960" cy="55" r="5" fill="#6E8F7E"/>
+    </svg>
+    <div class="steps">
+      <div><div class="n">01</div><h3>Seal</h3><p>Each fund encrypts its mark in the browser to the round's key. Only the enclave can open it.</p></div>
+      <div><div class="n">02</div><h3>Tally</h3><p>At the deadline the enclave counts, averages and measures the spread. The chain gets a count and a commitment.</p></div>
+      <div><div class="n">03</div><h3>Deliver</h3><p>A lender pays and receives the result sealed to their own key, with a salt to check it against the chain.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <section class="block">
+    <div class="head">
+      <div><div class="eyebrow">Rounds</div><h2 style="margin-top:12px">What's being <em>priced</em></h2></div>
+      <span class="btn ghost">Open a round</span>
+    </div>
+    <div class="row"><span class="i">01</span><span class="t">Harbor Retail term loan B</span><span class="lead"></span><span class="meta">closes in 2d 4h</span><span class="pill p-open">Open · 3 of 4</span></div>
+    <div class="row"><span class="i">02</span><span class="t">Calder Logistics unitranche</span><span class="lead"></span><span class="meta">4 funds · 0.1 NEAR</span><span class="pill p-pub">Published</span></div>
+    <div class="row"><span class="i">03</span><span class="t">Wren Health revolver</span><span class="lead"></span><span class="meta">tallying in enclave</span><span class="pill p-closing">Closing</span></div>
+  </section>
+
+  <section class="block" style="padding-top:56px">
+    <div class="head">
+      <div><div class="eyebrow">Round 02</div><h2 style="margin-top:12px">Calder Logistics <em>unitranche</em></h2></div>
+      <div class="seg"><span>Fund</span><span class="on">Lender</span><span>Verify</span></div>
+    </div>
+    <div class="detail">
+      <div class="card">
+        <div class="label">Panel</div>
+        <div class="ringrow">
+          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle cx="60" cy="60" r="50" fill="none" stroke="#E7E2D8" stroke-width="9"/>
+            <circle cx="60" cy="60" r="50" fill="none" stroke="#6E8F7E" stroke-width="9" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="0" transform="rotate(-90 60 60)"/>
+            <text x="60" y="58" text-anchor="middle" font-family="Instrument Serif" font-size="34" fill="#1C2420">4</text>
+            <text x="60" y="78" text-anchor="middle" font-family="Inter" font-size="10" fill="#8E958F">of 4 funds</text>
+          </svg>
+          <dl class="kv" style="flex:1">
+            <dt>Status</dt><dd><span class="pill p-pub">Published</span></dd>
+            <dt>Rejected</dt><dd>none</dd>
+            <dt>Read price</dt><dd>0.1 NEAR</dd>
+            <dt>Commitment</dt><dd class="mono">9c41…e07a</dd>
+          </dl>
+        </div>
+        <div class="funds">
+          <span class="fund"><i>1</i>fund1</span><span class="fund"><i>2</i>fund2</span><span class="fund"><i>3</i>fund3</span><span class="fund"><i>4</i>fund4</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">Consensus</div>
+        <div class="sealed">
+          <div style="display:flex;justify-content:space-between"><span style="font-size:13px;color:var(--soft)">Sealed until you buy a read</span><span class="label" style="color:var(--sage)">ECIES · your key</span></div>
+          <div class="nums"><div><div class="label">Mean</div><span class="blurnum">94.10</span></div><div><div class="label">Spread</div><span class="blurnum">1.63</span></div></div>
+        </div>
+        <span class="btn" style="width:100%;justify-content:center">Buy a read · 0.1 NEAR</span>
+        <div class="verify"><span class="dot"></span>Opened in your browser and checked against the on-chain commitment</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" style="padding-top:56px">
+    <div class="head"><div><div class="eyebrow">Vault</div><h2 style="margin-top:12px">Your <em>earnings</em></h2></div><span class="btn">Withdraw</span></div>
+    <div class="stats">
+      <div class="stat"><div class="label">Available</div><b>0.075 NEAR</b><small>from 3 reads</small></div>
+      <div class="stat"><div class="label">Rounds joined</div><b>2</b><small>both published</small></div>
+      <div class="stat"><div class="label">Reads bought</div><b>1</b><small>opened on this device</small></div>
+    </div>
+  </section>
+
+  <footer><div class="big">Nema</div><p class="mono" style="margin-top:8px">Quiet consensus · NEAR testnet</p></footer>
+</div>
+</body>
+</html>
