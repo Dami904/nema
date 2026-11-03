@@ -1,6 +1,6 @@
 <div align="center">
 
-<!-- LOGO GOES HERE once it exists: <img src="web/public/logo.svg" alt="Nema logo" width="72" /> -->
+<img src="web/public/logo.svg" alt="Nema logo: an italic n with a sage seal" width="72" />
 
 # Nema
 

@@ -9,6 +9,7 @@
   padding: 8px 10px 8px 22px; border-radius: 999px; background: rgba(251, 249, 244, 0.74); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(228, 222, 211, 0.9); }
 .brand { font: italic 26px/1 var(--serif); text-decoration: none; }
+.brand .seal { color: var(--sage); }
 .links { display: flex; gap: 2px; }
 .links a, .sheet a { font-size: 14px; color: var(--soft); text-decoration: none; padding: 8px 14px; border-radius: 999px; transition: background 0.15s; }
 .links a:hover { background: var(--linen); }
