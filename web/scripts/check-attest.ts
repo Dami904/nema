@@ -3,6 +3,7 @@
 // and NEAR RPC (read only).
 //
 //   npm run check-attest -- --job 1256360 --network mainnet
+//   npm run check-attest -- --job 16947 --network testnet --contract nema-dev.testnet
 
 import { attestationOf, netFor, verifyRun, type Attestation } from "../src/lib/attest";
 import { arg } from "./cli";
@@ -19,9 +20,10 @@ function check(claim: string, ok: boolean, detail = "") {
 const att = await attestationOf(job, net);
 console.log(`OutLayer job ${job} on ${net.network}: ${att.project_id} called by ${att.caller_account_id}\n`);
 
-// The run isn't Nema's, so expect whatever it claims for project and code; the
-// point is that the quote, chain, binding and worker checks pass on real data.
-const expect = { contract: "", project: att.project_id ?? "", wasmSha256: att.wasm_hash ?? "" };
+// For any run, expect whatever it claims for project and code; the point is that
+// the quote, chain, binding and worker checks pass on real data. Pass --contract
+// for a Nema run so the requesting contract is checked too.
+const expect = { contract: arg("contract", ""), project: att.project_id ?? "", wasmSha256: att.wasm_hash ?? "" };
 const real = await verifyRun(att, expect, net);
 for (const c of real.checks) console.log(`       ${c.ok === null ? "?" : c.ok ? "✓" : "✗"} ${c.label}: ${c.detail}`);
 console.log(`       output ${real.output === null ? "not among the transaction's return values" : `found: ${JSON.stringify(real.output).slice(0, 120)}`}`);

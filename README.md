@@ -1,152 +1,488 @@
+<div align="center">
+
+<!-- LOGO GOES HERE once it exists: <img src="web/public/logo.svg" alt="Nema logo" width="72" /> -->
+
 # Nema
 
-Quiet consensus. Funds agree on a price without showing each other their numbers.
+**Funds agree on a price for a private loan without showing each other their numbers.**
 
-> Status: live on NEAR testnet and run end to end. The contract
-> (sha256 `1820d211…bfa2`) is live on `nema-dev.testnet` with 4 panel funds, and
-> the enclave (sha256 `3ed58517…50d6`, the
-> [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release
-> of this repository) is the active version of the OutLayer project
-> `nema-dev.testnet/nema-aggregator`. Round 2 ran in full on 2026-11-03: four
-> sealed marks, the enclave tally, a free copy for a fund, a paid read for a
-> lender with the fee split four ways, and an audit, all 17 smoke checks passing.
+Sealed marks in. One consensus out. Nobody sees a single price.
+
+[![Tests](https://img.shields.io/badge/tests-121%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
+[![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
+[![Enclave](https://img.shields.io/badge/enclave-OutLayer%20·%20Intel%20TDX-4B6355?style=flat)](https://github.com/Dami904/nema/releases/tag/enclave-v2)
+
+**[Live app](https://nema-near.vercel.app)** · **[Docs](https://nema-near.vercel.app/docs)** · **[Judge it in 90 seconds](#judge-it-in-90-seconds)** · **[Proven on NEAR testnet](#proven-on-near-testnet)** · **[How a round works](#how-a-round-works)**
+
+Built for the NEAR Hackathon · Privacy & Private AI track.
+
+</div>
+
+<!--
+  DEMO VIDEO GOES HERE (under the header, before "The problem").
+  On GitHub: edit README.md in the browser, drag the .mp4 into this spot, and GitHub
+  inserts a https://github.com/user-attachments/assets/... link that plays inline.
+-->
+
+---
 
 ## The problem
 
 Private loans rarely trade, so every fund prices its own holdings. Two funds can
-carry the same loan at different marks, and a lender has to trust whichever
-number it is given. Funds would compare notes if it did not mean showing their
-book to competitors.
+carry the same loan at different marks, and a lender taking that loan as
+collateral has to trust whichever number it is given.
+
+Funds would compare notes if it did not mean showing their book to competitors.
+A shared spreadsheet leaks every price. An administrator who collects them is one
+more party to trust. And a published average over three funds is not private at
+all: anyone who knows two of the marks can work out the third.
 
 ## What Nema does
 
-Each fund submits its private mark encrypted. A hash-pinned module running in a
-hardware enclave decrypts the marks and computes the count, mean and spread. The
-chain shows only how many funds took part and a commitment to the result. A
-lender pays to read it, and the enclave encrypts the result to that lender's key
-alone. The fee is shared among the funds that contributed, and those funds read
-the result for free. No single price is ever revealed, and the consensus is not
-public either.
+Each fund seals its mark in the browser to a key only the enclave can open. When
+the round closes, a hash-pinned module in an Intel TDX enclave decrypts the marks
+and computes the count, mean and spread:
 
-Funds join by applying; the owner admits or turns them away. A fund can name an
-auditor, who can have the enclave open that fund's own marks (exactly as
-submitted, not a copy the fund could edit) and test them against the consensus.
+```text
+on chain:     who took part · how many counted · who was rejected and why · a commitment
+sealed:       the mean and spread, opened only by a key its reader holds
+never seen:   any single fund's mark
+```
 
-## What exists today
+- **Nobody sees a single price.** Marks are sealed to the round's key before they
+  leave the browser; only the enclave can open them, and it never returns one.
+- **The consensus isn't public either.** The chain holds a commitment to it. A
+  lender pays to read it and the enclave seals it to that lender's key alone.
+- **Funds are paid for their marks.** The read price is split equally among the
+  funds whose marks counted, and they read the result for free.
+- **No small rounds.** Nothing publishes below 4 valid marks, so no average can
+  give away one fund's price.
+- **One bad fund can't veto a round.** Out-of-range, undecryptable and copied
+  marks are dropped and named.
+- **Auditors see what was really sent.** A fund can name an auditor, who has the
+  enclave open that fund's own marks exactly as submitted, not a copy the fund
+  could edit, and tests them against the consensus.
+- **Every enclave run is checkable.** The app verifies OutLayer's Intel TDX quote
+  for each run in the browser, down to Nema's build hash.
 
-| Part | State |
+**Funds seal. The enclave counts. NEAR keeps the receipts.**
+
+---
+
+## Judge it in 90 seconds
+
+**Live: [nema-near.vercel.app](https://nema-near.vercel.app)**. No wallet needed
+for a look around:
+
+1. Click **Sample** at the top right. The persona menu next to it now picks who
+   you are.
+2. As **Fund · fund1**, open **Vault**: earnings, free reads, and a track record
+   of each mark against the consensus.
+3. Open **Rounds** → Calder Logistics (round 02) → **Verify**. The set hash and
+   commitment are recomputed in your browser, and each enclave run is checked
+   against its Intel quote.
+4. Switch to **Lender**: the opened consensus, a borrowing-base tool and a CSV
+   export. **Portfolio** flags Kestrel Software, whose price fell.
+5. Switch to **Auditor** → **Audit**: fund1's marks as the enclave opened them.
+6. Click **Live** to read the real contract on NEAR testnet, where round 02 ran in
+   full.
+
+|         |                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------- |
+| **121** | automated tests passing: 82 contract, 32 enclave, 7 browser crypto checks                |
+| **17**  | checks in the live smoke test, all passing on testnet round 2                            |
+| **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
+| **4**   | valid marks at minimum before anything is published                                      |
+
+Check the live system yourself, with nothing to install but Node:
+
+```bash
+# The round on chain: who took part, the count and the commitment, but no mean or spread
+curl -s https://rpc.testnet.fastnear.com -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"call_function","finality":"final","account_id":"nema-dev.testnet","method_name":"get_round","args_base64":"eyJyb3VuZF9pZCI6IjIifQ=="}}' \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Buffer.from(JSON.parse(s).result.result).toString()))'
+
+# The Intel TDX quote behind round 2's tally, checked end to end
+git clone https://github.com/Dami904/nema && cd nema/web && npm ci
+npm run check-attest -- --job 16947 --network testnet --contract nema-dev.testnet
+```
+
+---
+
+## Contents
+
+- [Proven on NEAR testnet](#proven-on-near-testnet)
+- [NEAR and OutLayer in use](#near-and-outlayer-in-use)
+- [The core proof](#the-core-proof)
+- [Architecture](#architecture)
+- [How a round works](#how-a-round-works)
+- [The lines that hold the line](#the-lines-that-hold-the-line)
+- [Tested, not claimed](#tested-not-claimed)
+- [Engineering decisions](#engineering-decisions)
+- [What's sample vs. real](#whats-sample-vs-real)
+- [Trust model](#trust-model)
+- [Live product surface](#live-product-surface)
+- [Deployed](#deployed)
+- [Tech stack](#tech-stack)
+- [Project layout](#project-layout)
+- [Run it locally](#run-it-locally)
+- [How it was built](#how-it-was-built)
+
+---
+
+## Proven on NEAR testnet
+
+Round 2 ran in full on 2026-11-03: four funds, a lender and an auditor, every step
+a transaction you can open. The enclave runs are OutLayer jobs whose Intel quotes
+pass every check (`npm run check-attest -- --job <id> --network testnet --contract nema-dev.testnet`).
+
+| What happened | Transactions | Enclave run |
+| --- | --- | --- |
+| **The owner opened a round** for a term loan; the enclave derived the round's public key | [open](https://testnet.nearblocks.io/txns/ARdFHNMwsxN7BBkLhEJbz26ME1pjFCfSv8cVCkQTK3AG) | job 16942 ✓ |
+| **Four funds submitted sealed marks**; the chain stores only ciphertext | [fund1](https://testnet.nearblocks.io/txns/5eHpjdpvBAb1UzC4eyknPsdcqJBDiwjuDPPdJAjTwFDg) · [fund2](https://testnet.nearblocks.io/txns/sxUY6DKoF7K7ZACjP7QFDY3xopHUYVfpE5e85ATdHyb) · [fund3](https://testnet.nearblocks.io/txns/6WVJRVdvY5qtxG1ZyAtaAKs45h82DGXKwDRz8DtCq8xC) · [fund4](https://testnet.nearblocks.io/txns/9qeXnQez4ThVshDHQhf8bG9MkaqMSipr2WVMPgno5aDC) | |
+| **A fund closed the round after its deadline**; the enclave counted 4 of 4 and published the count and a commitment, not the result | [close](https://testnet.nearblocks.io/txns/Hz8DW4ZSL7W6KqxFuk1K7cgf8WsDKoZcRtgCk4yx3cTX) | job 16947 ✓ |
+| **fund1 claimed its free copy**; it opened to 94.43 ± 1.7458 and matched the commitment | [claim](https://testnet.nearblocks.io/txns/8mEvBQLbEwoswZiXbkdfCrBuRRLJoZZDK1YJQQps2uNp) | job 16953 ✓ |
+| **fund1 tried to claim a second free copy**: refused | [refused](https://testnet.nearblocks.io/txns/2rRBZhjLgnHs1um1o5UWSnxFJuF8ecoDZJ2y3DswnnkN) | none, by design |
+| **A lender paid 0.1 NEAR to read it**; the enclave sealed the result to the lender's key, and each fund was credited 0.025 NEAR | [buy](https://testnet.nearblocks.io/txns/65z7R5YxisdECzia8MNB8HbLqTmYLrcuvMePD4sEPXB4) | job 16954 ✓ |
+| **fund4 named an auditor, who had the enclave open fund4's mark**, exactly as fund4 sent it | [name](https://testnet.nearblocks.io/txns/ckEgnMEotxSKDFZkxnnbuUZviQKfDDmbeQkTbQD65HY) · [audit](https://testnet.nearblocks.io/txns/DTqbegvLFZQ5ZjECCBTteio2W2jm2vfMBTEyuYf9V52c) | job 16956 ✓ |
+| **Another fund tried to audit fund4**: refused | [refused](https://testnet.nearblocks.io/txns/2SpLVSaZnC1fyF7D48AWkoEtUGdot7uxYKrwR4aUWmKn) | none, by design |
+
+The run is `npm run smoke` in [`web/scripts/smoke.ts`](web/scripts/smoke.ts): 17 checks, all passing.
+
+---
+
+## NEAR and OutLayer in use
+
+Each piece does real work. None is decorative.
+
+| Piece | What Nema uses it for | Code |
+| --- | --- | --- |
+| **NEAR contract** | Members and applications, rounds and deadlines, the sealed submissions, the committed set, listings, paid and free reads, audits, fee shares and refunds | [`contract/src/lib.rs`](contract/src/lib.rs) |
+| **OutLayer TEE execution** | Runs the enclave module inside Intel TDX for each round key, tally, delivery and audit, called by the contract through `request_execution` with a callback | [`aggregator/src/main.rs`](aggregator/src/main.rs) |
+| **OutLayer secrets** | The master secret is generated inside OutLayer's TEE and released only to runs requested through `nema-dev.testnet` of the exact enclave build `3ed58517…` (`Predecessor` + `WasmHash` lock) | [`aggregator/src/crypto.rs`](aggregator/src/crypto.rs) |
+| **OutLayer attestations** | Each run's Intel TDX quote, checked in the browser: Intel's chain, the task hash, the worker image, Nema's build hash, the requesting contract | [`web/src/lib/attest.ts`](web/src/lib/attest.ts) |
+| **NEAR Wallet Selector** | Meteor, MyNearWallet and HERE sign-in; every call is signed in the user's own wallet | [`web/src/lib/wallet.tsx`](web/src/lib/wallet.tsx) |
+| **FastNEAR RPC** | Every view the app reads | [`web/src/lib/near.ts`](web/src/lib/near.ts) |
+
+---
+
+## The core proof
+
+### The chain knows who took part, not what they said
+
+Round 2 as anyone can read it (`get_round`, trimmed):
+
+```json
+{
+  "id": "2",
+  "status": "Published",
+  "submitted": ["fund1.nema-dev.testnet", "fund2.nema-dev.testnet", "fund3.nema-dev.testnet", "fund4.nema-dev.testnet"],
+  "set_hash": "e0af837ee7ff4bf8eb6f2850f59ba6739a185b76234de0f7233b1caa609a82fd",
+  "listing": {
+    "count": 4,
+    "rejected": [],
+    "commitment": "5693a6679ea94e6f5e54993abc83c278c01c9e9f524f28a7feaf3428ab874f6f"
+  }
+}
+```
+
+- **`submitted`**: four funds took part. Their marks are on chain only as ECIES ciphertext.
+- **`set_hash`**: the exact set of ciphertexts the round committed to at its deadline. The enclave refuses to tally or deliver for any other set, and the app recomputes it in the browser.
+- **`count` / `rejected`**: how many marks counted and which were dropped, with reasons.
+- **`commitment`**: SHA-256 over the contract, round, a salt, the count, the mean and the spread. No mean or spread appears anywhere on chain.
+
+### Only a reader's key opens the result
+
+The same round, as the lender's copy opened in the browser with a key that never
+left the device: `count 4 · mean 94.43 · spread 1.7458`, plus the salt. Hashing
+those with the contract and round id gives `5693a667…`, the commitment above, so
+the lender knows it got the result the enclave committed to and not some other
+number.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+  subgraph Browser["Browser · nema-near.vercel.app"]
+    F["Fund<br/>seals its mark to the round key"]
+    L["Lender<br/>reading key kept on the device"]
+    A["Auditor"]
+    V["Verify<br/>set hash · commitment · Intel quote"]
+  end
+  subgraph NEAR["NEAR testnet"]
+    C["Nema contract<br/>nema-dev.testnet"]
+  end
+  subgraph OutLayer["OutLayer · Intel TDX"]
+    E["Nema enclave module<br/>wasm 3ed58517…"]
+    K["Keystore<br/>master secret, locked to the contract + build"]
+  end
+
+  F -- "submit ciphertext" --> C
+  L -- "buy_read + public key" --> C
+  A -- "request_audit + public key" --> C
+  C -- "request_execution: key · tally · deliver · audit" --> E
+  K -- "master secret" --> E
+  E -- "pubkey · count + commitment · sealed copy" --> C
+  V -- "reads rounds, jobs and quotes" --> C
+  V -. "OutLayer attestation API" .-> E
+```
+
+| Layer | Owns |
 | --- | --- |
-| `aggregator/` enclave module (round keys, decrypt, tally, sealed delivery, audit) | Written, 32 tests passing, builds to `wasm32-wasip2` (about 461 KB, sha256 `3ed58517…50d6` with Rust 1.96; the same bytes from a fresh clone) |
-| `contract/` NEAR contract (members, applications, rounds, committed set, listings, paid and free reads, audits, refunds, earnings, state migration) | Written, 82 unit tests passing. Live on `nema-dev.testnet` (sha256 `1820d211…bfa2`) with 4 panel funds |
-| `interop/` browser encryption (eciesjs) against the enclave | Verified in both directions |
-| OutLayer testnet | Project `nema-dev.testnet/nema-aggregator` runs the enclave from this repository's `enclave-v2` release, checked by hash. The master secret is generated inside OutLayer's TEE and released only to `nema-dev.testnet` running that exact hash |
-| `web/` app (Vite, React) | Seven pages on the live contract (including Docs and an auditor's desk), sample data for every state, wallet sign-in (Meteor, MyNearWallet, HERE), marks sealed in the browser, reads opened with a key kept on the device, a borrowing-base tool and price history per loan |
-| Lender portfolio and export | `/portfolio` totals the borrowing base across every loan an account has opened, flags prices that fell since the last read, and exports CSV or prints to PDF. Each round's result exports as CSV with the salt and commitment, so the file can be checked without the app. Inputs stay on the device |
-| Fund track record | A fund's Vault charts each of its marks against the consensus, round by round: how often it sat within one spread, its average gap and its lean. The fund sees it from marks kept on its device; its auditor sees the same from marks the enclave opened for it. No one else can |
-| Enclave proofs | Each round's Verify view fetches OutLayer's Intel TDX quote for every enclave run behind it and checks it in the browser: Intel's certificate chain to a pinned root, the task hash in the quote, the worker image on OutLayer's approved list, Nema's build hash, the requesting contract and the result on chain. `npm run check-attest` runs the same checks on any OutLayer job; tested on real mainnet and testnet runs |
-| `web/scripts/` | `npm run smoke` runs one full round on the live network and checks it end to end (passed on round 2); `npm run close-rounds` closes rounds past their deadline |
+| **Contract** (NEAR) | Who is on the panel, round deadlines, the sealed submissions, the set committed at the deadline, the listing, every read and audit, fee shares, refunds. Nothing it stores reveals a mark or the result. |
+| **Enclave module** (OutLayer, Intel TDX) | Round keys, decryption, the tally, sealed delivery to one reader, audits. Stateless: everything is recomputed from the master secret and the ciphertexts the contract passes in. Answers only the contract named in the request. |
+| **Keystore** (OutLayer) | The master secret, generated inside the TEE and released only to runs of Nema's exact build requested through Nema's contract. |
+| **Browser** | Sealing marks, holding reading keys, opening sealed copies, and checking the set hash, commitment and Intel quotes. There is no Nema server. |
 
-## Try it in two minutes
+| Path | Role |
+| --- | --- |
+| [`contract/`](contract) | The NEAR contract (near-sdk 5.17), 82 tests |
+| [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 32 tests |
+| [`web/`](web) | The app (React, Vite): seven pages, sample data for every state, wallet sign-in |
+| [`web/scripts/`](web/scripts) | `smoke` (one full live round), `close-rounds`, `check-attest`, `test` (crypto vectors) |
+| [`interop/`](interop) | Browser encryption (eciesjs) against the enclave, both directions |
+| [`testdata/`](testdata) | Shared vectors the contract, enclave and browser all test against |
 
-No wallet needed. Open the hosted app at **https://nema-near.vercel.app** or run
-it locally (below), then:
+---
 
-1. Click **Sample** in the switch at the top right (or **Try it with sample data**
-   on the home page). The persona menu next to it
-   now picks who you are.
-2. As **Fund · fund1**, open **Vault**. You see your earnings, the reads you got for
-   free and your track record: each mark against the consensus, 3 of 4 within one
-   spread, with round 8 flagged outside the band.
-3. Open **Rounds**, then a published round (Calder Logistics, round 02), and its
-   **Verify** tab. The set hash and commitment are recomputed in your browser, and
-   the enclave proof panel lists each enclave run with its checks.
-4. Switch to **Lender**. On the same round you see the opened consensus, the
-   borrowing-base tool and **Download valuation (CSV)**. **Portfolio** totals the
-   book and flags Kestrel Software, whose price fell.
-5. Switch to **Auditor** and open **Audit**. You see fund1's marks, as the enclave
-   opened them, against the consensus, with the same track record.
-6. Click **Live** to read the real contract on NEAR testnet.
+## How a round works
 
-## Run the tests
+```mermaid
+sequenceDiagram
+    autonumber
+    participant O as Owner
+    participant F as Funds
+    participant C as Nema contract
+    participant E as Enclave (OutLayer)
+    participant L as Lender
 
-```
-cd aggregator
-cargo test
-```
-
-Build the enclave module, from the repository root (this is the same command
-OutLayer runs when it builds the enclave from this repository):
-
-```
-rustup target add wasm32-wasip2
-cargo build --target wasm32-wasip2 --release
-# target/wasm32-wasip2/release/nema-aggregator.wasm
-```
-
-Run the contract tests, and build the contract (Rust 1.93 or newer):
-
-```
-cd contract
-cargo test
-bash build.sh
+    O->>C: open_round(loan, deadline)
+    C->>E: derive_pubkey(round)
+    E-->>C: round public key
+    F->>C: submit(sealed mark), one per fund
+    Note over C: deadline passes
+    F->>C: close_round: anyone may close
+    C->>C: commit the set hash
+    C->>E: tally(set, set hash, minimum)
+    E->>E: refuse any other set, decrypt, drop bad marks
+    alt fewer than 4 valid
+        E-->>C: nothing published
+    else 4 or more
+        E-->>C: count, rejected, commitment
+    end
+    L->>C: buy_read(public key) + price
+    C->>E: deliver(set, commitment, lender key)
+    E-->>C: result sealed to the lender
+    C->>C: split the price among contributing funds
+    L->>L: open in the browser, check against the commitment
 ```
 
-Run the web app (Node 22.18 or newer):
+### Round states
 
+```mermaid
+stateDiagram-v2
+    [*] --> AwaitingKey: owner opens
+    AwaitingKey --> Open: enclave returns the key
+    AwaitingKey --> Failed: key refused, or the deadline passes without one
+    Open --> Closing: closed after the deadline
+    Open --> Failed: fewer than 4 submitted
+    Closing --> Published: tally committed
+    Closing --> CloseFailed: enclave run failed
+    CloseFailed --> Closing: anyone retries
+    Published --> [*]
+    Failed --> [*]
 ```
-cd web
-npm install
-npm run dev     # http://localhost:5179, add ?demo=1 for sample data
-npm test        # browser hashes and sealing against the shared and Rust vectors
+
+A read is `Pending` until the enclave seals it, then `Delivered`, or `Refunded` if
+the enclave run fails, so a failed call never keeps a lender's money.
+
+---
+
+## The lines that hold the line
+
+The enclave answers only the contract named in the request, checked against the
+account OutLayer reports as the caller
+([`aggregator/src/main.rs`](aggregator/src/main.rs)):
+
+```rust
+fn handle(req: Request, master: &crypto::Master, predecessor: &str) -> Value {
+    if req.contract() != predecessor {
+        return fail("only the round's contract may call this module");
+    }
 ```
 
-Run one real round on testnet and check it (signs with NEAR CLI from the OS
-keychain; costs about 0.06 NEAR in enclave fees, 0.06 NEAR in storage deposits
-and one read price):
+Without it, anyone could ask the enclave to tally a hand-picked set, such as one
+real fund's ciphertext next to three of their own, and read that fund's mark off
+the mean.
 
+And it tallies only the set the contract committed to at the deadline:
+
+```rust
+let set_hash = crypto::set_hash(&pairs);
+if set_hash != expected_set_hash {
+    return Err(fail("the submissions do not match the committed set"));
+}
 ```
-npm run smoke -- --owner nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
-```
 
-## Design rules
+- **The secret is locked twice.** OutLayer releases the master secret only to Nema's exact build (`WasmHash`) requested through Nema's contract (`Predecessor`). A rebuild, or the same build called by anyone else, gets nothing.
+- **A copied ciphertext is rejected.** Each fund encrypts its own account next to its mark, so replaying another fund's ciphertext gets it dropped and named.
+- **Integer arithmetic only**: marks in hundredths, mean to 0.01, spread to 0.0001, with an exact integer square root. The browser checks every opened copy against the commitment.
+- **The callbacks never panic.** A failed enclave call is recorded on the round or the read and can be retried or refunded; it never strands state.
 
-- Integer arithmetic only, so the mean and spread are exact.
-- A round publishes nothing below 4 valid contributors, because a mean and spread
-  over three or fewer funds can reveal individual prices.
-- Only the round's contract can ask the enclave to tally or deliver, and only for
-  the submission set it committed to at the deadline.
-- Out-of-range, undecryptable and copied submissions are dropped and named, so one
-  bad fund cannot veto a round.
-- A failed enclave call never strands a round or a payment: closes can be retried
-  and purchases are refunded.
+---
+
+## Tested, not claimed
+
+**121 automated tests pass**: 82 contract (`cargo test` in `contract/`), 32 enclave
+(`cargo test` in `aggregator/`) and 7 browser crypto checks (`npm test` in `web/`).
+On top, the live smoke test runs 17 checks on testnet and the attestation checker
+runs 7 on real OutLayer jobs, including tampered copies that must fail.
+
+| Proof | Test |
+| --- | --- |
+| The enclave refuses a set other than the committed one | `tally_refuses_a_set_other_than_the_committed_one` ([`aggregator/src/tests.rs`](aggregator/src/tests.rs)) |
+| Nothing publishes below the minimum | `tally_below_the_minimum_publishes_nothing` |
+| The tally reveals count and commitment, never the result | `tally_publishes_count_and_commitment_but_not_the_result` |
+| A delivery must match the published commitment | `deliver_refuses_a_commitment_that_does_not_match` |
+| A failed enclave call is recorded, not panicked | `a_failed_enclave_call_is_recorded_not_panicked` ([`contract/src/tests.rs`](contract/src/tests.rs)) |
+| A round that never got its key can be ended | `a_round_that_never_got_its_key_can_be_ended_after_its_deadline` |
+| The contract reads OutLayer's real response | `outcome_maps_enclave_responses`, using the exact bytes OutLayer returned on testnet |
+| Browser, contract and enclave agree byte for byte | the set hash, commitment and sealing vectors in [`testdata/`](testdata), checked by all three |
+| Every enclave run is the published build, asked for by the contract | `npm run check-attest` on jobs 16942, 16947, 16954 and 16956: all checks pass |
+| The whole flow works on the live network | `npm run smoke`: 17 of 17 on round 2 |
+
+---
+
+## Engineering decisions
+
+- **Sealed in the browser, opened only in the enclave.** Marks are ECIES ciphertext from the moment they leave the fund's device; no server ever holds them.
+- **The set is committed before the enclave sees it,** so the enclave can't be asked to tally a different set, and a lender can check the set it paid for.
+- **A commitment instead of a public result.** The consensus is what lenders pay for, so the chain proves it exists and is fixed without giving it away.
+- **Stateless enclave.** Round keys and salts are derived from the master secret, so any approved worker gives the same answer and nothing needs migrating.
+- **A minimum of 4.** Below that, a mean and spread can reveal individual prices.
+- **Reading keys stay on the device.** The enclave seals each copy to a public key the reader generated in the browser; the app offers a backup file.
+- **Pay the people who price.** The read price goes to the funds whose marks counted, so contributing is worth something.
+- **Verify in the browser, not on trust.** The app checks each run's Intel quote itself instead of showing a badge.
+
+---
+
+## What's sample vs. real
+
+- **Sample mode is sample data.** The **Sample** switch fills every screen with made-up funds, rounds and reads (Calder Logistics, Kestrel Software and others), so each state can be seen without a wallet. Nothing in it touches the chain.
+- **Live mode is real.** It reads `nema-dev.testnet`, and every action is a signed NEAR testnet transaction.
+- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; round 1 ended without a key while a contract bug was being fixed.
+- **Testnet only.** No real money moves.
+
+---
+
+## Trust model
+
+- **Privacy rests on the enclave hardware and its operator**, not on a threshold of independent nodes. If Intel TDX or OutLayer's worker were compromised, marks could be read. The app checks every run's quote so that a run on anything else is visible.
+- **A reader who opens the result can share it.** Nema controls who can open it, not what they do afterwards.
+- **A reader's key lives in that browser's storage.** Anything that can read the page's storage (an extension, someone at the machine) can open that reader's copies. The app offers a backup file; losing both means losing access.
+- **A fund can still lie inside the valid range.** Out-of-range marks are caught; a plausible wrong mark is not. Its track record, and its auditor, are how that shows over time.
+- **The owner admits funds.** A panel of four accounts one person controls would make the minimum meaningless, so who is on the panel matters, and it is public.
 
 More in [DESIGN.md](DESIGN.md).
 
-## Trust model (to be stated in full before submission)
+---
 
-- Privacy rests on the enclave hardware and its operator, not on a threshold of
-  independent nodes.
-- A buyer who opens the result can share it.
-- The buyer's reading key lives in that browser's local storage. Anything that can
-  read the page's storage (an extension, someone at the machine) can open that
-  buyer's reads. The app offers a backup file; losing both means losing access.
-- A fund can still lie inside the valid range. Only out-of-range values are caught.
+## Live product surface
 
-## Hosting
+| Route | What it shows |
+| --- | --- |
+| [`/`](https://nema-near.vercel.app) | Landing page: the problem, how a round works, who sees what |
+| [`/rounds`](https://nema-near.vercel.app/rounds) | Every round, open, published or not |
+| `/rounds/:id` | One round: submit, close, read, and **Verify** (set hash, commitment, each enclave run's Intel quote) |
+| [`/vault`](https://nema-near.vercel.app/vault) | A fund's earnings, free reads, track record, reading key and auditor |
+| [`/portfolio`](https://nema-near.vercel.app/portfolio) | A lender's borrowing base across every loan it opened, with CSV and PDF export |
+| [`/audit`](https://nema-near.vercel.app/audit) | An auditor's desk: each client's marks as the enclave opened them |
+| [`/panel`](https://nema-near.vercel.app/panel) | The panel of funds, applications, and the owner's tools |
+| [`/docs`](https://nema-near.vercel.app/docs) | How it works, the contract methods, the enclave, and quick starts per role |
 
-The web app is a static site, hosted on Vercel at https://nema-near.vercel.app;
-the contract and the enclave run on NEAR and OutLayer, so there is no server. To
-host your own copy, import the repo into Vercel and set the root directory to
-`web`. `web/vercel.json` sets the build and sends every path to the app.
+---
+
+## Deployed
+
+NEAR testnet:
+
+| What | Where |
+| --- | --- |
+| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `1820d2114b0f576bc811f418f7e07a046a1aa7a4b6035b4cf6e4b494253abfa2` |
+| Enclave project | OutLayer `nema-dev.testnet/nema-aggregator` |
+| Enclave build | [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproducible with Rust 1.96) |
+| Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet]}, WasmHash(3ed58517…)]` |
+| Web app | [nema-near.vercel.app](https://nema-near.vercel.app) (Vercel, static) |
+
+---
+
+## Tech stack
+
+- **Chain:** NEAR testnet · near-sdk 5.17.2 · Rust
+- **Enclave:** OutLayer · Intel TDX · Rust → `wasm32-wasip2` · `ecies` 0.2 (pure Rust) · `hkdf` · `sha2`
+- **Web:** React 19.3 · Vite 8.3 · React Router 7.18 · TypeScript 5.9 · `eciesjs` 0.5 · NEAR Wallet Selector 10.1 (Meteor, MyNearWallet, HERE)
+- **Hosting:** Vercel (static site); the contract and enclave run on NEAR and OutLayer, so there is no server
+
+---
+
+## Project layout
+
+```text
+nema/
+├─ contract/      NEAR contract: panel, rounds, reads, audits, fees (near-sdk)
+├─ aggregator/    enclave module: keys, decrypt, tally, deliver, audit (wasm32-wasip2)
+├─ web/
+│  ├─ src/        the app: pages, wallet, sealing, attestation checks, sample data
+│  └─ scripts/    smoke, close-rounds, check-attest, crypto vectors
+├─ interop/       browser ↔ enclave encryption check
+├─ testdata/      vectors shared by the contract, enclave and browser
+├─ DESIGN.md      the design in full
+└─ Cargo.toml     workspace root, so OutLayer builds the enclave from here
+```
+
+---
+
+## Run it locally
+
+Requires Rust (1.93+, 1.96 for the reproducible enclave hash) and Node 22.18+.
+
+```bash
+git clone https://github.com/Dami904/nema && cd nema
+
+# Enclave: tests, then the same build OutLayer runs
+cd aggregator && cargo test && cd ..
+rustup target add wasm32-wasip2
+cargo build --target wasm32-wasip2 --release   # target/wasm32-wasip2/release/nema-aggregator.wasm
+
+# Contract: tests and build
+cd contract && cargo test && bash build.sh && cd ..
+
+# Web app
+cd web && npm ci
+npm run dev     # http://localhost:5179, add ?demo=1 for sample data
+npm test        # browser hashes and sealing against the shared vectors
+```
 
 No environment variables are needed for testnet. To point at another contract or
 network, set the `VITE_*` values from `web/.env.example`; they end up in the
-browser bundle, so put nothing secret there.
+browser bundle, so put nothing secret there. To host your own copy, import the
+repo into Vercel with the root directory set to `web`.
+
+Run one real round on testnet and check it (signs with NEAR CLI from the OS
+keychain; about 0.06 NEAR in enclave fees, 0.06 NEAR in storage and one read price):
+
+```bash
+npm run smoke -- --owner nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
+```
+
+---
 
 ## How it was built
 
-All code in this repo was written during the hackathon, starting 2026-11-02, so
-there is no earlier baseline.
+All code in this repo was written during the hackathon, starting 2026-11-02.
 
 AI-assisted: the code, tests and docs were written with Claude Code (Anthropic)
 pair-programming under the author's direction, across the contract, the enclave
@@ -157,23 +493,26 @@ Third-party code, used as libraries and not copied in:
 
 - Contract: `near-sdk`, `serde_json`, `hex`
 - Enclave: `ecies` (pure Rust), `hkdf`, `sha2`, `serde`, `serde_json`, `hex`
-- Web: React, React Router, Vite, `eciesjs`, NEAR Wallet Selector (Meteor,
-  MyNearWallet, HERE), `buffer`
-- Services: OutLayer (TEE execution and attestations), FastNEAR RPC, NearBlocks
-  explorer links
-- Intel's SGX root CA public key is pinned in `web/src/lib/attest.ts` to check
-  enclave quotes
+- Web: React, React Router, Vite, `eciesjs`, NEAR Wallet Selector, `buffer`
+- Services: OutLayer (TEE execution, secrets and attestations), FastNEAR RPC, NearBlocks explorer links
+- Intel's SGX root CA public key is pinned in `web/src/lib/attest.ts` to check enclave quotes
 
 `testdata/interop/rust.json` holds a throwaway key made for the test vectors; it
 guards nothing.
 
+Credits: the encrypt-submit, decrypt-in-enclave, aggregate pattern follows
+OutLayer's [private-dao-example](https://app.outlayer.ai/docs/examples). Visual
+direction drew on templates in the [Kombai gallery](https://kombai.com/gallery);
+no template code is used.
+
 ## License
 
-MIT, see [LICENSE](LICENSE).
+[MIT](LICENSE)
 
-## Prior art and credits
+---
 
-- The encrypt-submit, decrypt-in-enclave, aggregate pattern follows OutLayer's
-  private-dao-example (https://app.outlayer.ai/docs/examples).
-- Visual direction drew on templates in the Kombai gallery (kombai.com/gallery). No template code is used.
-- Built for NEAR Hackathon, Privacy & Private AI track.
+<div align="center">
+
+**Lenders get a price they can trust. Funds never show their hand.**
+
+</div>
