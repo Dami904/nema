@@ -46,8 +46,8 @@ submitted, not a copy the fund could edit) and test them against the consensus.
 
 ## Try it in two minutes
 
-No wallet needed. Open the hosted app (link added once it is deployed) or run it
-locally (below), then:
+No wallet needed. Open the hosted app at **https://nema-near.vercel.app** or run
+it locally (below), then:
 
 1. Click **Sample** in the switch at the top right (or **Try it with sample data**
    on the home page). The persona menu next to it
