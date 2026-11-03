@@ -132,13 +132,10 @@ More in [DESIGN.md](DESIGN.md).
 
 ## Hosting
 
-The web app is a static site; the contract and the enclave already run on NEAR
-and OutLayer. Either host works with the config in this repo:
-
-- **Vercel**: import the repo and set the root directory to `web`.
-  `web/vercel.json` sets the build and sends every path to the app.
-- **Render**: create a Blueprint from the repo. `render.yaml` builds `web/` as a
-  static site with the same rewrite.
+The web app is a static site, hosted on Vercel at https://nema-near.vercel.app;
+the contract and the enclave run on NEAR and OutLayer, so there is no server. To
+host your own copy, import the repo into Vercel and set the root directory to
+`web`. `web/vercel.json` sets the build and sends every path to the app.
 
 No environment variables are needed for testnet. To point at another contract or
 network, set the `VITE_*` values from `web/.env.example`; they end up in the
