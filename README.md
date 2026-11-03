@@ -72,11 +72,13 @@ cd aggregator
 cargo test
 ```
 
-Build the enclave module:
+Build the enclave module, from the repository root (this is the same command
+OutLayer runs when it builds the enclave from this repository):
 
 ```
 rustup target add wasm32-wasip2
 cargo build --target wasm32-wasip2 --release
+# target/wasm32-wasip2/release/nema-aggregator.wasm
 ```
 
 Run the contract tests, and build the contract (Rust 1.93 or newer):
