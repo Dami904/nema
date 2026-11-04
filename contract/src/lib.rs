@@ -606,9 +606,12 @@ impl Nema {
     }
 
     /// Submit (or replace) a fund's encrypted mark. The latest submission before the
-    /// round closes counts.
-    pub fn submit(&mut self, round_id: u64, ciphertext_hex: String) {
+    /// round closes counts. The fund pays for the storage its mark adds: attach up
+    /// to 0.03 NEAR (enough for the largest mark) and the unused part comes back.
+    #[payable]
+    pub fn submit(&mut self, round_id: u64, ciphertext_hex: String) -> PromiseOrValue<()> {
         let who = env::predecessor_account_id();
+        let before = env::storage_usage();
         require!(self.members.contains(&who), "not a panel member");
         validate_ciphertext_hex(&ciphertext_hex);
         let now = env::block_timestamp();
@@ -627,10 +630,24 @@ impl Nema {
             Some(existing) => *existing = sub,
             None => round.submissions.push(sub),
         }
+        // Write the round now so the storage it grew by can be measured and charged.
+        self.rounds.flush();
+        let added = env::storage_usage().saturating_sub(before);
+        let cost = added as u128 * env::storage_byte_cost().as_yoctonear();
+        let attached = env::attached_deposit().as_yoctonear();
+        require!(
+            attached >= cost,
+            format!("attach at least {cost} yoctoNEAR for the storage this mark uses")
+        );
         emit(
             "mark_submitted",
-            json!({"round_id": round_id, "account": who}),
+            json!({"round_id": round_id, "account": who, "storage_cost": U128(cost)}),
         );
+        if attached > cost {
+            PromiseOrValue::Promise(Self::pay(who, attached - cost))
+        } else {
+            PromiseOrValue::Value(())
+        }
     }
 
     /// Anyone can close a round once its time is up. Attach at least 0.01 NEAR for the
@@ -707,7 +724,7 @@ impl Nema {
             call.then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(CALLBACK_GAS)
-                    .on_tally(round_id, caller, U128(fee)),
+                    .on_tally(round_id, caller, U128(fee), U64(now)),
             ),
         )
     }
@@ -963,8 +980,19 @@ impl Nema {
     }
 
     #[private]
-    pub fn on_tally(&mut self, round_id: u64, payer: AccountId, fee: U128) {
-        self.apply_tally(round_id, enclave_answer(payer, fee));
+    /// `requested_at` names the close this answers. A round can be closed again
+    /// after a failed or settled close, so an answer to an earlier one is ignored
+    /// rather than taken as the answer to the retry.
+    pub fn on_tally(&mut self, round_id: u64, payer: AccountId, fee: U128, requested_at: U64) {
+        let answer = enclave_answer(payer, fee);
+        if self.pending_since.get(&format!("r{round_id}")) != Some(&requested_at.0) {
+            emit(
+                "callback_ignored",
+                json!({"kind": "tally", "id": round_id, "reason": "answers an earlier close"}),
+            );
+            return;
+        }
+        self.apply_tally(round_id, answer);
     }
 
     #[private]
@@ -1054,6 +1082,10 @@ impl Nema {
             .filter(|m| self.auditors.get(*m).map(|ap| &ap.auditor) == Some(&auditor))
             .cloned()
             .collect()
+    }
+
+    pub fn get_audit(&self, audit_id: U64) -> Option<AuditCopy> {
+        self.audits.get(&audit_id.0).cloned()
     }
 
     pub fn get_audits_of(&self, auditor: AccountId) -> Vec<AuditCopy> {

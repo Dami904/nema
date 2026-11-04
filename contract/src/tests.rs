@@ -70,9 +70,12 @@ fn with_open_round() -> Nema {
     c
 }
 
+/// What the app attaches to a submission; the unused part comes back.
+const SUB: u128 = 30_000_000_000_000_000_000_000;
+
 fn submit_from(c: &mut Nema, who: &AccountId, seed: u8) {
-    testing_env!(ctx(who, 0, 200));
-    c.submit(1, ct(seed));
+    testing_env!(ctx(who, SUB, 200));
+    let _ = c.submit(1, ct(seed));
 }
 
 fn submit_all(c: &mut Nema) {
@@ -245,7 +248,7 @@ fn enclave_error_on_key_fails_the_round_without_panicking() {
 fn outsiders_cannot_submit() {
     let mut c = with_open_round();
     testing_env!(ctx(&"mallory.near".parse().unwrap(), 0, 200));
-    c.submit(1, ct(9));
+    let _ = c.submit(1, ct(9));
 }
 
 #[test]
@@ -256,7 +259,7 @@ fn cannot_submit_before_the_key_arrives() {
     testing_env!(ctx(&owner(), DEPOSIT, 100));
     let _ = c.open_round("Loan A".into(), U64(1000 * NS));
     testing_env!(ctx(&accounts(1), 0, 200));
-    c.submit(1, ct(1));
+    let _ = c.submit(1, ct(1));
 }
 
 #[test]
@@ -264,7 +267,7 @@ fn cannot_submit_before_the_key_arrives() {
 fn cannot_submit_after_the_deadline() {
     let mut c = with_open_round();
     testing_env!(ctx(&accounts(1), 0, 1000));
-    c.submit(1, ct(1));
+    let _ = c.submit(1, ct(1));
 }
 
 #[test]
@@ -272,7 +275,7 @@ fn cannot_submit_after_the_deadline() {
 fn ciphertext_must_be_hex() {
     let mut c = with_open_round();
     testing_env!(ctx(&accounts(1), 0, 200));
-    c.submit(1, "zz".repeat(40));
+    let _ = c.submit(1, "zz".repeat(40));
 }
 
 #[test]
@@ -280,7 +283,7 @@ fn ciphertext_must_be_hex() {
 fn ciphertext_must_be_long_enough() {
     let mut c = with_open_round();
     testing_env!(ctx(&accounts(1), 0, 200));
-    c.submit(1, "ab".into());
+    let _ = c.submit(1, "ab".into());
 }
 
 #[test]
@@ -1487,7 +1490,7 @@ fn an_answer_that_is_not_json_is_a_failure_not_a_panic() {
         PromiseResult::Successful(b"<html>502</html>".to_vec()),
         1002,
     );
-    c.on_tally(1, accounts(1), U128(DEPOSIT));
+    c.on_tally(1, accounts(1), U128(DEPOSIT), U64(1001 * NS));
     assert_eq!(status(&c), RoundStatus::CloseFailed);
     assert_eq!(
         refunded_to(&accounts(1)),
@@ -1506,7 +1509,7 @@ fn a_good_answer_through_the_callback_publishes() {
         PromiseResult::Successful(good_tally(&h).to_string().into_bytes()),
         1002,
     );
-    c.on_tally(1, accounts(1), U128(DEPOSIT));
+    c.on_tally(1, accounts(1), U128(DEPOSIT), U64(1001 * NS));
     assert_eq!(status(&c), RoundStatus::Published);
 }
 
@@ -1635,4 +1638,135 @@ fn a_read_from_before_the_wait_was_recorded_can_still_be_settled() {
     let _ = c.reconcile_read(id);
     assert_eq!(purchase(&c, id).status, PurchaseStatus::Refunded);
     assert_eq!(refunded_to(&buyer()), PRICE);
+}
+
+// ---- submissions pay for their storage; a stale tally can't fail a retry ----
+
+#[test]
+fn a_mark_pays_for_its_own_storage_and_gets_the_rest_back() {
+    let mut c = with_open_round();
+    let f = funds()[0].clone();
+    submit_from(&mut c, &f, 1);
+    let back = refunded_to(&f);
+    assert!(back > 0 && back < SUB, "charged {} of {SUB}", SUB - back);
+    // 80-byte ciphertext plus the record: a few hundred bytes at 1e19 yocto each.
+    assert!(SUB - back < 10_000_000_000_000_000_000_000);
+}
+
+#[test]
+#[should_panic(expected = "for the storage this mark uses")]
+fn a_mark_without_a_storage_deposit_is_refused() {
+    let mut c = with_open_round();
+    testing_env!(ctx(&funds()[0], 0, 200));
+    let _ = c.submit(1, ct(1));
+}
+
+#[test]
+fn replacing_a_mark_with_one_the_same_size_costs_nothing() {
+    let mut c = with_open_round();
+    let f = funds()[0].clone();
+    submit_from(&mut c, &f, 1);
+    submit_from(&mut c, &f, 2);
+    assert_eq!(refunded_to(&f), SUB);
+}
+
+#[test]
+fn an_answer_to_an_earlier_close_is_ignored() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c); // first close at 1001s
+    let h = set_hash(&c);
+    testing_env!(ctx(&accounts(2), 0, 1001 + 30 * 60));
+    c.reconcile_round(1);
+    let retry_at = 1001 + 30 * 60 + 5;
+    testing_env!(ctx(&accounts(2), DEPOSIT, retry_at));
+    let _ = c.close_round(1);
+    // The first close's tally finally lands: it answers the old close, not the retry.
+    answered(
+        PromiseResult::Successful(good_tally(&h).to_string().into_bytes()),
+        retry_at + 1,
+    );
+    c.on_tally(1, accounts(1), U128(DEPOSIT), U64(1001 * NS));
+    assert_eq!(
+        status(&c),
+        RoundStatus::Closing,
+        "still waiting on the retry"
+    );
+    assert!(events().contains(&"callback_ignored".to_string()));
+    // The retry's own answer publishes.
+    answered(
+        PromiseResult::Successful(good_tally(&h).to_string().into_bytes()),
+        retry_at + 2,
+    );
+    c.on_tally(1, accounts(2), U128(DEPOSIT), U64(retry_at * NS));
+    assert_eq!(status(&c), RoundStatus::Published);
+}
+
+/// A full panel of 64 funds with the largest ciphertexts: the tally and a delivery
+/// that credits all 64 must fit well inside the callbacks' 40 Tgas. The mock counts
+/// host-function gas (storage, hashing, logs); round 2 on testnet measured the rest
+/// of a 4-fund callback at about 2 Tgas.
+#[test]
+fn a_full_round_fits_in_the_callback_gas() {
+    let mut c = fresh();
+    let panel: Vec<AccountId> = (0..MAX_MEMBERS)
+        .map(|i| format!("fund{i}.testnet").parse().unwrap())
+        .collect();
+    for f in &panel {
+        c.add_member(f.clone());
+    }
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    c.apply_round_key(1, Ok(json!({ "ok": true, "pubkey": pubkey() })));
+    for f in &panel {
+        testing_env!(ctx(f, SUB, 200));
+        let _ = c.submit(1, "ab".repeat(MAX_CIPHERTEXT_HEX / 2));
+    }
+    close(&mut c);
+    let h = set_hash(&c);
+
+    testing_env!(ctx(&owner(), 0, 1002));
+    let start = env::used_gas().as_gas();
+    c.apply_tally(
+        1,
+        Ok(json!({"ok": true, "count": MAX_MEMBERS, "rejected": [], "set_hash": h, "commitment": commitment()})),
+    );
+    flush(&mut c); // collections write at the end of a call; count those writes too
+    let tally = (env::used_gas().as_gas() - start) as f64 / 1e12;
+    assert_eq!(status(&c), RoundStatus::Published);
+
+    let id = buy(&mut c);
+    testing_env!(ctx(&owner(), 0, 1101));
+    let start = env::used_gas().as_gas();
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    flush(&mut c);
+    let deliver = (env::used_gas().as_gas() - start) as f64 / 1e12;
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Delivered);
+
+    println!("64-fund tally: {tally:.2} Tgas, delivery to 64: {deliver:.2} Tgas (host functions)");
+    assert!(
+        tally + 2.0 < 40.0 && deliver + 2.0 < 40.0,
+        "tally {tally}, deliver {deliver}"
+    );
+}
+
+fn flush(c: &mut Nema) {
+    c.rounds.flush();
+    c.purchases.flush();
+    c.earnings.flush();
+    c.pending_since.flush();
+}
+
+#[test]
+fn one_audit_can_be_read_by_id() {
+    let mut c = with_open_round();
+    let f = funds()[1].clone();
+    name_auditor(&mut c, &f);
+    submit_from(&mut c, &f, 9);
+    close(&mut c);
+    testing_env!(ctx(&auditor(), READ, 1100));
+    let _ = c.request_audit(1, f.clone(), pubkey());
+    let a = c.get_audit(U64(1)).unwrap();
+    assert_eq!((a.fund, a.status), (f, AuditStatus::Pending));
+    assert!(c.get_audit(U64(2)).is_none());
 }

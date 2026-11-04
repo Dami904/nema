@@ -376,7 +376,7 @@ function ContractRef() {
   const fee = near(ENCLAVE_FEE_YOCTO);
   const read = near(READ_EXTRA_YOCTO);
   const calls = [
-    { m: "submit(round_id, ciphertext_hex)", who: "Panel fund", cost: "Gas only" },
+    { m: "submit(round_id, ciphertext_hex)", who: "Panel fund", cost: "0.03 NEAR for storage; the unused part comes back" },
     { m: "buy_read(round_id, buyer_pubkey)", who: "Anyone", cost: `Read price + ${read} (enclave + storage)` },
     { m: "claim_read(round_id, buyer_pubkey)", who: "Counted funds, and auditors named before the deadline; once per round", cost: read },
     { m: "request_audit(round_id, fund, auditor_pubkey)", who: "The auditor that fund named, after the deadline", cost: read },
@@ -396,7 +396,7 @@ function ContractRef() {
   ];
   const views = [
     "get_config", "get_members", "get_rounds", "get_round", "get_submissions", "get_purchase", "get_purchases_of", "get_earnings",
-    "get_applications", "get_auditor", "get_appointment", "get_clients_of", "get_audits_of", "get_free_basis", "get_pending_since",
+    "get_applications", "get_auditor", "get_appointment", "get_clients_of", "get_audits_of", "get_free_basis", "get_pending_since", "get_audit",
   ];
   return (
     <Section id="contract" eyebrow="Reference" title={<>Contract <em>methods</em></>}>

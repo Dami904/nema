@@ -9,7 +9,7 @@
 Sealed marks in. One consensus out. Nobody sees a single price.
 
 [![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-150%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![Tests](https://img.shields.io/badge/tests-156%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
@@ -92,8 +92,8 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **150** | automated tests passing: 111 contract, 32 enclave, 7 browser crypto checks               |
-| **17**  | safety guards, each removed in turn to confirm a test fails without it                   |
+| **156** | automated tests passing: 117 contract, 32 enclave, 7 browser crypto checks               |
+| **19**  | safety guards, each removed in turn to confirm a test fails without it                   |
 | **17**  | checks in the live smoke test, all passing on testnet round 2                            |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
 | **4**   | valid marks at minimum before anything is published                                      |
@@ -351,21 +351,22 @@ if set_hash != expected_set_hash {
 
 ## Tested, not claimed
 
-**150 automated tests pass**: 111 contract (`cargo test` in `contract/`), 32 enclave
+**156 automated tests pass**: 117 contract (`cargo test` in `contract/`), 32 enclave
 (`cargo test` in `aggregator/`) and 7 browser crypto checks (`pnpm test`). CI runs
 them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
 rebuild of both wasm files against their pinned hashes, and a scan for committed
 secrets. On top, the live smoke test runs 17 checks on testnet and the attestation
 checker runs 7 on real OutLayer jobs, including tampered copies that must fail.
 
-Each of the 17 guards that protect marks or money was deleted in turn to confirm
+Each of the 19 guards that protect marks or money was deleted in turn to confirm
 some test fails without it: the committed-set check (contract and enclave), the
 caller check, copied ciphertexts, one free copy per round, auditor-only audits,
 the auditor recheck on delivery, dropping removed funds, the duplicate-read
 refusal, lowercase-only keys, the 30-minute wait before settling, the refund of
 a failed read, paying bonds and refunds, keeping a bounced payment as earnings,
-the cap on the enclave fee, returning the fee when OutLayer refuses the call, and
-treating a non-JSON answer as a failure.
+the cap on the enclave fee, returning the fee when OutLayer refuses the call,
+treating a non-JSON answer as a failure, making each mark pay for its own storage,
+and ignoring a tally that answers an earlier close.
 
 | Proof | Test |
 | --- | --- |
@@ -444,7 +445,7 @@ NEAR testnet:
 
 | What | Where |
 | --- | --- |
-| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `cf0c725edba8abe1f42791f2f17f597a833794d79c75de273233cd15a89e2e4e` |
+| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `05e0b58ede2fbb1899d9673b980e6166a82a9d7c380298d876c37af4939108f8` |
 | Enclave project | OutLayer `nema-dev.testnet/nema-aggregator` |
 | Enclave build | [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproduces with Rust 1.96 on Windows with `CARGO_HOME=C:\Users\USER\.cargo`, since the wasm embeds that path; CI checks it) |
 | Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet]}, WasmHash(3ed58517…)]` |
@@ -511,10 +512,13 @@ outside `web/src/lib/config.ts`, on any non-`VITE_*` key inside it, and on
 the root directory set to `web`, or deploy from your machine with
 `pnpm live:deploy` in `web/` (builds locally, uploads the output).
 
-Scripts that sign or spend are named `live:*` and never run in CI.
+Scripts that sign or spend are named `live:*` and never run in CI. One of them is
+a keeper: `pnpm live:close-rounds --signer <account>` closes every round past its
+deadline and settles any round, read or audit the enclave has left unanswered for
+30 minutes (`--dry-run` lists what it would do without signing).
 
 Run one real round on testnet and check it (signs with NEAR CLI from the OS
-keychain; about 0.06 NEAR in enclave fees, 0.06 NEAR in storage and one read price):
+keychain; about 0.06 NEAR in enclave fees, mostly returned by OutLayer, about 0.08 NEAR in storage and one read price):
 
 ```bash
 pnpm live:smoke --owner nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4

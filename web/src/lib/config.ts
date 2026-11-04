@@ -14,7 +14,7 @@ export const REPO_URL = (env.VITE_REPO_URL as string | undefined) ?? "";
 
 /** Builds we expect on chain, so the Docs page can compare them. */
 export const BUILDS = {
-  contractWasmSha256: "cf0c725edba8abe1f42791f2f17f597a833794d79c75de273233cd15a89e2e4e",
+  contractWasmSha256: "05e0b58ede2fbb1899d9673b980e6166a82a9d7c380298d876c37af4939108f8",
   enclaveWasmSha256: "3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6",
   enclaveProject: "nema-dev.testnet/nema-aggregator",
 };
@@ -25,6 +25,8 @@ export const ENCLAVE_FEE_YOCTO = 10n ** 22n;
 export const STORAGE_DEPOSIT_YOCTO = 2n * 10n ** 22n;
 /** What a read or an audit attaches on top of any read price. */
 export const READ_EXTRA_YOCTO = ENCLAVE_FEE_YOCTO + STORAGE_DEPOSIT_YOCTO;
+/** Attached to a submission: covers the largest mark's storage; the rest comes back. */
+export const SUBMIT_DEPOSIT_YOCTO = 3n * 10n ** 22n;
 
 export const POLL_MS = 15_000;
 /** How long the contract waits on the enclave before anyone may settle a call (STALE_AFTER_NS). */

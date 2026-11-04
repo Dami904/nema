@@ -43,8 +43,10 @@ that is not refunded is refused before any OutLayer call is made
 **The deposit is a fee cap.**
 The contract forwards the caller's enclave fee (0.01 NEAR from the app, at most
 0.05 NEAR; any surplus goes straight back) and names the caller as `payer`, the
-account OutLayer's interface returns unused deposit to. We have not measured how
-much comes back per run, or whether a failed run is charged in full.
+account OutLayer's interface returns unused deposit to. It does: on round 2's
+tally and paid read, OutLayer sent 0.00892 NEAR of each 0.01 back to the payer, so
+a run cost about 0.0011 NEAR. Whether a failed run is charged in full is not
+measured.
 
 **If OutLayer refuses the call itself, the fee comes back to the contract, not the
 payer.** That is NEAR's rule: a failed receipt refunds its deposit to whoever sent

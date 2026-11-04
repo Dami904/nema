@@ -9,11 +9,11 @@
 // Add --round <id> to pick up a round this script already opened and published
 // (its marks are the ones below) and run only the reads, fees and audit.
 //
-// Costs about 0.06 NEAR in enclave fees, 0.06 NEAR in storage deposits kept by
+// Costs about 0.06 NEAR in enclave fees (OutLayer returns most), 0.08 NEAR in storage kept by
 // the contract, and one read price paid by the lender.
 
 import { PrivateKey } from "eciesjs";
-import { BUILDS, CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO } from "../src/lib/config";
+import { BUILDS, CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../src/lib/config";
 import { base58ToHex, commitment, setHash } from "../src/lib/hashes";
 import { encodeLoan } from "../src/lib/loan";
 import { viewAccount } from "../src/lib/near";
@@ -83,7 +83,7 @@ check("the enclave made the round key", open!.status === "Open" && !!open!.pubke
 if (open!.status !== "Open") process.exit(1);
 
 // ---- submit ----
-for (const [i, f] of funds.entries()) call(f, "submit", { round_id: Number(id), ciphertext_hex: sealMark(open!.pubkey!, f, MARKS[i]) });
+for (const [i, f] of funds.entries()) call(f, "submit", { round_id: Number(id), ciphertext_hex: sealMark(open!.pubkey!, f, MARKS[i]) }, SUBMIT_DEPOSIT_YOCTO);
 subs = await view<Submission[]>("get_submissions", { round_id: id });
 check("every fund's sealed mark is stored", subs.length === funds.length);
 const onChain = JSON.stringify(subs);

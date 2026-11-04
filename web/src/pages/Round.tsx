@@ -7,7 +7,7 @@ import { Settle } from "../components/Settle";
 import { useToast } from "../components/Toaster";
 import { useAccount } from "../lib/account";
 import { useChain, useLoad, useNow } from "../lib/chain";
-import { CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, STORAGE_DEPOSIT_YOCTO } from "../lib/config";
+import { CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, STORAGE_DEPOSIT_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../lib/config";
 import { date, handle, near, nsToMs, short } from "../lib/format";
 import { commitment, setHash, sha256Hex } from "../lib/hashes";
 import { downloadBackup, ensureBuyerKey, getBuyerKey, keepMark, restoreBackup, sealMark } from "../lib/keys";
@@ -187,7 +187,7 @@ function FundView({ round, isMember }: { round: RoundT; isMember: boolean }) {
     if (demoMode) return act({ method: "submit", args: {}, label: "Your mark" });
     setBusy(true);
     const ciphertext_hex = sealMark(round.pubkey, accountId, hundredths);
-    const ok = await act({ method: "submit", args: { round_id: Number(round.id), ciphertext_hex }, label: "Your sealed mark" });
+    const ok = await act({ method: "submit", args: { round_id: Number(round.id), ciphertext_hex }, deposit: SUBMIT_DEPOSIT_YOCTO, label: "Your sealed mark" });
     if (ok) {
       if (keep) keepMark(accountId, round.id, hundredths);
       setMark("");
@@ -203,7 +203,7 @@ function FundView({ round, isMember }: { round: RoundT; isMember: boolean }) {
         <label htmlFor="mark">Price, in points of par</label>
         <input id="mark" inputMode="decimal" placeholder="94.25" value={mark} onChange={(e) => (setMark(e.target.value), setErr(null))}
           aria-invalid={!!err} aria-describedby="mark-help" />
-        {err ? <span className="err">{err}</span> : <small id="mark-help">Encrypted in your browser before it leaves. Only the enclave can open it.</small>}
+        {err ? <span className="err">{err}</span> : <small id="mark-help">Encrypted in your browser before it leaves. Only the enclave can open it. Attaches {near(SUBMIT_DEPOSIT_YOCTO)} for storage; the unused part comes back.</small>}
       </div>
       <label className="checkbox">
         <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
