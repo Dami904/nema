@@ -3,6 +3,10 @@
 // private on chain. Every transaction is real and signed with NEAR CLI from the
 // OS keychain.
 //
+// Add --drop to test the other path: the owner removes the last fund after it
+// submits, so its mark is dropped at close, the round fails with too few marks,
+// and the closer's deposit comes back. The fund is put back on the panel after.
+//
 //   pnpm live:smoke --owner nema-dev.testnet --funds fund1.nema-dev.testnet,fund2...,fund3...,fund4... \
 //                    --lender lender.nema-dev.testnet --minutes 4
 //
@@ -26,6 +30,7 @@ const funds = arg("funds", [1, 2, 3, 4].map((n) => `fund${n}.${CONFIG.contract}`
 const lender = arg("lender", `lender.${CONFIG.contract}`);
 const minutes = Number(arg("minutes", "4"));
 const resume = arg("round", "");
+const drop = process.argv.includes("--drop");
 /** Marks in hundredths; the enclave's exact result is recomputed below. */
 const MARKS = [9410, 9525, 9180, 9655, 9300, 9440].slice(0, funds.length);
 
@@ -94,6 +99,28 @@ const wait = Number(closesAt / 1_000_000n) - Date.now() + 5_000;
 if (wait > 0) {
   console.log(`  …   waiting ${Math.ceil(wait / 1000)}s for the deadline`);
   await sleep(wait);
+}
+if (drop) {
+  const removed = funds[funds.length - 1];
+  call(owner, "remove_member", { account: removed });
+  const balance = async () => BigInt((await viewAccount(funds[0])).amount);
+  const before = await balance();
+  try {
+    call(funds[0], "close_round", { round_id: Number(id) }, ENCLAVE_FEE_YOCTO, 300);
+  } finally {
+    call(owner, "add_member", { account: removed });
+  }
+  const failedRound = await view<Round>("get_round", { round_id: id });
+  check("the removed fund's mark was dropped at close", (await view<Submission[]>("get_submissions", { round_id: id })).every((s) => s.account !== removed));
+  check("the round failed with too few marks", failedRound.status === "Failed" && /only 3 of the required 4/.test(failedRound.last_error ?? ""), failedRound.last_error ?? "");
+  // The 0.01 NEAR came back; what the closer lost is gas, well under 0.005 NEAR.
+  await sleep(5_000);
+  const spent = before - (await balance());
+  check("the closer's enclave deposit came back", spent < 5n * 10n ** 21n, `${spent} yocto spent on gas`);
+  check("the fund is back on the panel", (await view<string[]>("get_members")).includes(removed));
+  console.log(`
+${failed === 0 ? "All checks passed" : `${failed} check(s) failed`} · round ${id} · ${CONFIG.explorerAccount}${CONFIG.contract}`);
+  process.exit(failed === 0 ? 0 : 1);
 }
 call(funds[0], "close_round", { round_id: Number(id) }, ENCLAVE_FEE_YOCTO, 300);
 }

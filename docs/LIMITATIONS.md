@@ -10,7 +10,8 @@ What Nema does not do yet, or does only partly. Each item says why.
   expose marks. Removing the key is permanent, so it waits for the final deploy.
   See [THREAT_MODEL.md](THREAT_MODEL.md).
 - **The live rounds are test rounds.** Rounds 2, 3 and 4 ran in full with four
-  funds, a lender and an auditor, but all of them are accounts the author controls.
+  funds, a lender and an auditor, and round 5 tested a fund removed before close,
+  but all of them are accounts the author controls.
 - **One OutLayer project, one master secret, no rotation.** A new secret means new
   round keys; old rounds stay tied to the old secret.
 - **No limit on how many rounds a reader can combine.** Results from many rounds
@@ -37,12 +38,14 @@ What Nema does not do yet, or does only partly. Each item says why.
   stale round, read and audit in one pass (`--dry-run` to look first). Nothing
   runs it on a schedule, since that would need a signing key on a server. In
   every testnet run so far the callback did arrive.
-- **The failure paths have only run in tests.** Round 3 ran on the current build
-  (`05e0b58e…`): storage deposits on marks, the tally, free and paid reads, equal
-  shares to the funds, an audit, and the refusals of a second free copy and of an
-  audit by the wrong account. Settling a stuck call, dropping a removed fund at
-  close, a bounced payment and a refused enclave call have never happened live;
-  117 contract tests cover them.
+- **Some failure paths have only run in tests.** Rounds 3 to 5 ran on the
+  current build (`05e0b58e…`): storage deposits on marks, the tally, free and paid
+  reads, equal shares to the funds, an audit, the refusals of a second free copy
+  and of an audit by the wrong account, and (round 5, `pnpm live:smoke --drop`) a
+  fund removed before close: its mark was dropped, the round failed with 3 of 4,
+  and the closer's deposit came back. Settling a stuck call, a bounced payment
+  and a refused enclave call can't be caused on demand and have never happened
+  live; 117 contract tests cover them.
 - **Enclave quotes are checked, revocation is not.** The browser checks the chain
   to Intel's root and the measurements, not Intel's TCB status or revocation
   lists.
@@ -54,9 +57,16 @@ What Nema does not do yet, or does only partly. Each item says why.
 - **The enclave source is frozen.** Any edit changes the hash the secret is locked
   to. So it is not formatted with `rustfmt`, and lint exceptions live in
   `Cargo.toml`.
-- **A timed-out wallet transaction is reported as failed.** The app does not look
-  it up by hash. It refetches state every 15 seconds, so one that landed appears,
+- **A lost wallet transaction is found through one indexer.** When a wallet times
+  out or drops, the app looks for the transaction on chain through FastNEAR's
+  transaction API before calling it failed. If that API is down or behind, the
+  app says nothing was found; the 15-second refresh still shows one that landed,
   and the contract refuses a duplicate read or close.
+- **Switching enclave hosts is manual.** The OutLayer project loads the enclave
+  from FastFS, with the GitHub release as a standby copy of the same bytes. A
+  version has one URL, so if FastFS stops serving, someone runs `pnpm
+  live:enclave-source github`; until then enclave calls fail and reads refund
+  their price.
 
 ## Out of scope
 

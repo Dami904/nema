@@ -137,7 +137,12 @@ decodes it. Views are read-only and safe to retry; the app polls every 15
 seconds.
 
 **A transaction that times out on the RPC may still land.**
-Neither the app nor the scripts look a timed-out transaction up by hash; they
-report it as failed. Resending is safe for reads and closes because the contract
-refuses the duplicate (same key, or a round already `Closing`), and the app
-refetches state every 15 seconds, so a transaction that did land shows up.
+When the wallet throws for any reason but a cancel, the app does not call it
+failed straight away. A wallet doesn't hand back the hash of a transaction it
+lost, so the app asks FastNEAR's transaction API (`tx.test.fastnear.com/v0/account`,
+CORS open) for the account's recent transactions, newest first, and fetches each
+one sent since the user confirmed. If one calls the same method on Nema, the app
+reports how it ended. It looks four times over 20 seconds, then says nothing
+was found. The scripts still report a timeout as a failure. Resending is safe
+for reads and closes because the contract refuses the duplicate (same key, or a
+round already `Closing`).

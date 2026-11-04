@@ -7,6 +7,8 @@ export const CONFIG = {
   contract: (env.VITE_NEMA_CONTRACT as string | undefined) ?? "nema-dev.testnet",
   explorerTx: (env.VITE_EXPLORER_TX as string | undefined) ?? "https://testnet.nearblocks.io/txns/",
   explorerAccount: (env.VITE_EXPLORER_ACCOUNT as string | undefined) ?? "https://testnet.nearblocks.io/address/",
+  /** Lists an account's recent transactions, to find one a wallet lost track of. */
+  txApi: (env.VITE_TX_API as string | undefined) ?? "https://tx.test.fastnear.com",
 };
 
 /** The public repository, linked from the footer once it is set. */

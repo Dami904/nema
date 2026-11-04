@@ -6,7 +6,8 @@ import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useToast } from "../components/Toaster";
-import { CONFIG } from "./config";
+import { CONFIG, POLL_MS } from "./config";
+import { findSent } from "./near";
 
 const TGAS = 10n ** 12n;
 
@@ -54,12 +55,14 @@ function init() {
   return selectorPromise;
 }
 
+const CANCELLED = "You cancelled it in your wallet.";
+
 /** Pulls a readable reason out of a wallet error or a failed transaction outcome. */
 function reason(e: unknown): string {
   const text = e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
   const m = text.match(/Smart contract panicked: ([^"\\]+)/) ?? text.match(/ExecutionError":"([^"\\]+)/);
   if (m) return m[1];
-  if (/reject|cancel|denied|closed/i.test(text)) return "You cancelled it in your wallet.";
+  if (/reject|cancel|denied|closed/i.test(text)) return CANCELLED;
   return text.length > 180 ? text.slice(0, 180) + "…" : text;
 }
 
@@ -108,6 +111,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return false;
       }
       toast("info", `${c.label}: confirm in your wallet`);
+      const started = Date.now();
       try {
         const wallet = await selector.wallet();
         const outcome = await wallet.signAndSendTransaction({
@@ -122,7 +126,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         toast("ok", `${c.label}: confirmed`);
         return true;
       } catch (e) {
-        toast("bad", `${c.label} wasn't sent`, reason(e));
+        const why = reason(e);
+        if (why === CANCELLED) {
+          toast("bad", `${c.label} wasn't sent`, why);
+          return false;
+        }
+        // A timeout or dropped connection can come after the transaction went out,
+        // so look for it on chain before calling it failed.
+        toast("info", `${c.label}: the wallet lost track of it, checking the chain`);
+        const account = selector.store.getState().accounts.find((a) => a.active)?.accountId;
+        for (let i = 0; account && i < 4; i++) {
+          await new Promise((r) => setTimeout(r, POLL_MS / 3));
+          const tx = await findSent(account, c.method, started);
+          if (!tx) continue;
+          const bad = failure(tx);
+          if (bad) toast("bad", `${c.label} failed`, bad);
+          else toast("ok", `${c.label}: confirmed`, `Found on chain: ${CONFIG.explorerTx}${tx.transaction.hash}`);
+          return !bad;
+        }
+        toast("bad", `${c.label} not found on chain`, `${why} Nothing from your account has reached Nema since you confirmed.`);
         return false;
       }
     },
