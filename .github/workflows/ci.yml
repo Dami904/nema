@@ -50,7 +50,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
-      - run: ./build.sh
+      - run: bash build.sh
 
   # The enclave source is frozen: any edit changes the wasm hash the secret lock
   # pins, so it is not reformatted and fmt is not checked here.
@@ -92,7 +92,7 @@ jobs:
           test -n "$pinned" && test "$pinned" = "$built"
       - name: Contract wasm matches the deployed hash
         run: |
-          ./contract/build.sh
+          bash contract/build.sh
           pinned=$(sed -nE 's/.*contractWasmSha256: "([0-9a-f]{64})".*/\1/p' web/src/lib/config.ts)
           built=$(sha256sum contract/res/nema_contract.wasm | cut -d' ' -f1)
           echo "pinned $pinned"; echo "built  $built"
