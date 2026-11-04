@@ -285,6 +285,8 @@ function RoundsSection() {
       </dl>
       <Callout title="Nothing gets stuck">
         If the enclave fails during a close, the round can be closed again. If it fails while sealing a read, the read price goes back to the buyer.
+        If it never answers at all, anyone can settle the call 30 minutes later with the Settle button: the close can be retried, the read is
+        refunded, the audit can be asked again.
       </Callout>
       <p>
         Marks are integers in hundredths of a point, from 0 to 200.00. The enclave drops out-of-range, undecryptable and copied submissions and
@@ -382,6 +384,11 @@ function ContractRef() {
     { m: "set_auditor(auditor | null)", who: "A panel fund, for itself", cost: "Gas only" },
     { m: "close_round(round_id)", who: "Anyone, after the deadline", cost: `${fee}, returned if too few marks` },
     { m: "withdraw()", who: "Funds with earnings", cost: "Gas only; put back if the transfer fails" },
+    {
+      m: "reconcile_round(round_id) · reconcile_read(purchase_id) · reconcile_audit(audit_id)",
+      who: "Anyone, 30 minutes after the enclave call",
+      cost: "Gas only; a read's price goes back",
+    },
     { m: "open_round(loan, closes_at)", who: "Owner", cost: fee },
     { m: "approve(account) · reject(account)", who: "Owner", cost: "Gas only; the bond goes back" },
     { m: "add_member(account) · remove_member(account)", who: "Owner", cost: "Gas only" },
@@ -389,7 +396,7 @@ function ContractRef() {
   ];
   const views = [
     "get_config", "get_members", "get_rounds", "get_round", "get_submissions", "get_purchase", "get_purchases_of", "get_earnings",
-    "get_applications", "get_auditor", "get_appointment", "get_clients_of", "get_audits_of", "get_free_basis",
+    "get_applications", "get_auditor", "get_appointment", "get_clients_of", "get_audits_of", "get_free_basis", "get_pending_since",
   ];
   return (
     <Section id="contract" eyebrow="Reference" title={<>Contract <em>methods</em></>}>

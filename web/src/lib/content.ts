@@ -36,7 +36,7 @@ export const FAQ = [
   },
   {
     q: "What happens if the enclave fails?",
-    a: "Nothing gets stuck. A failed close can be retried by anyone, and a failed read refunds the buyer automatically.",
+    a: "Nothing gets stuck. A failed close can be retried by anyone, and a failed read refunds the buyer automatically. If the enclave never answers, anyone can settle the call after 30 minutes: the close is retried, the read refunded, the audit asked again.",
   },
   {
     q: "Can a lender share the result after buying it?",
