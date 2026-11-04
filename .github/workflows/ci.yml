@@ -9,8 +9,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# The Rust version, components and targets come from rust-toolchain.toml.
 env:
-  RUST_VERSION: "1.96.0"
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -39,17 +39,13 @@ jobs:
         working-directory: contract
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: contract
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
       - run: bash build.sh
 
   # The enclave source is frozen: any edit changes the wasm hash the secret lock
@@ -58,15 +54,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: clippy
-          targets: wasm32-wasip2
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy -p nema-aggregator --all-targets -- -D warnings
-      - run: cargo test -p nema-aggregator
-      - run: cargo build -p nema-aggregator --release --target wasm32-wasip2
+      - run: cargo clippy --locked -p nema-aggregator --all-targets -- -D warnings
+      - run: cargo test --locked -p nema-aggregator
+      - run: cargo build --locked -p nema-aggregator --release --target wasm32-wasip2
 
   # The deployed builds embed the builder's Cargo registry path in panic
   # messages, so their hashes reproduce only on Windows with this Cargo home.
@@ -81,11 +73,10 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           mkdir -p "$CARGO_HOME"
-          rustup toolchain install "$RUST_VERSION" --profile minimal --target wasm32-wasip2 --target wasm32-unknown-unknown
-          rustup default "$RUST_VERSION"
+          rustup toolchain install
       - name: Enclave wasm matches the hash the secret lock pins
         run: |
-          cargo build -p nema-aggregator --release --target wasm32-wasip2
+          cargo build --locked -p nema-aggregator --release --target wasm32-wasip2
           pinned=$(sed -nE 's/.*enclaveWasmSha256: "([0-9a-f]{64})".*/\1/p' web/src/lib/config.ts)
           built=$(sha256sum target/wasm32-wasip2/release/nema-aggregator.wasm | cut -d' ' -f1)
           echo "pinned $pinned"; echo "built  $built"
@@ -110,6 +101,11 @@ jobs:
         # A secret key is 64 bytes, so its base58 runs past 80 characters; public keys are about 44.
         run: |
           if git grep -nE 'ed25519:[1-9A-HJ-NP-Za-km-z]{80,}'; then exit 1; fi
+      - name: No other private keys committed
+        # testdata/interop/rust.json holds a throwaway key made for the test vectors.
+        run: |
+          if git grep -nE -- '-----BEGIN [A-Z ]*PRIVATE KEY-----'; then exit 1; fi
+          if git grep -niE '"[a-z_]*(secret|private|_sk|seed)[a-z_]*"[[:space:]]*:[[:space:]]*"(0x)?[0-9a-f]{64}' -- ':!testdata/interop/rust.json'; then exit 1; fi
       - name: Pinned hashes agree across config and docs
         run: |
           for name in enclaveWasmSha256 contractWasmSha256; do
