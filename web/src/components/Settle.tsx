@@ -7,7 +7,7 @@ import type { PendingKind } from "../lib/source";
 
 const METHOD: Record<PendingKind, { method: string; arg: string; label: string; does: string }> = {
   round: { method: "reconcile_round", arg: "round_id", label: "Settling the close", does: "marks the close failed so it can be retried" },
-  read: { method: "reconcile_read", arg: "purchase_id", label: "Settling your read", does: "refunds the read price" },
+  read: { method: "reconcile_read", arg: "purchase_id", label: "Settling your read", does: "refunds the read price (OutLayer keeps its fee)" },
   audit: { method: "reconcile_audit", arg: "audit_id", label: "Settling the audit", does: "marks it failed so it can be asked again" },
 };
 

@@ -41,7 +41,7 @@ use near_sdk::json_types::{U128, U64};
 use near_sdk::store::{IterableMap, IterableSet, LookupMap};
 use near_sdk::{
     env, ext_contract, log, near, require, AccountId, BorshStorageKey, Gas, NearToken,
-    PanicOnDefault, Promise, PromiseError, PromiseOrValue,
+    PanicOnDefault, Promise, PromiseError, PromiseOrValue, PromiseResult,
 };
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -49,7 +49,13 @@ use std::collections::HashSet;
 /// Least NEAR attached to an enclave request (0.01 NEAR). Unused deposit is refunded
 /// to the payer by OutLayer.
 const MIN_OUTLAYER_DEPOSIT: u128 = 10_000_000_000_000_000_000_000;
-const CALLBACK_GAS: Gas = Gas::from_tgas(20);
+/// The most of a caller's deposit forwarded to OutLayer; any surplus goes straight
+/// back. If OutLayer refuses the call itself, NEAR returns the fee to this contract,
+/// which passes it on to the payer, so the cap bounds what that path can cost.
+const MAX_OUTLAYER_DEPOSIT: u128 = 50_000_000_000_000_000_000_000;
+const CALLBACK_GAS: Gas = Gas::from_tgas(40);
+/// For the callback after a payment, which only puts the amount back on failure.
+const PAY_GAS: Gas = Gas::from_tgas(8);
 const MAX_MEMBERS: u32 = 64;
 const MAX_CIPHERTEXT_HEX: usize = 2048;
 const MIN_CIPHERTEXT_HEX: usize = 64;
@@ -454,7 +460,7 @@ impl Nema {
                 },
             );
         }
-        Promise::new(account).transfer(NearToken::from_yoctonear(app.bond.0))
+        Self::pay(account, app.bond.0)
     }
 
     /// Turn an applicant away. Its bond is returned.
@@ -464,7 +470,7 @@ impl Nema {
             .applications
             .remove(&account)
             .unwrap_or_else(|| env::panic_str("no such application"));
-        Promise::new(account).transfer(NearToken::from_yoctonear(app.bond.0))
+        Self::pay(account, app.bond.0)
     }
 
     /// Applies to purchases made after the change.
@@ -515,7 +521,7 @@ impl Nema {
             .applications
             .remove(&who)
             .unwrap_or_else(|| env::panic_str("no application to withdraw"));
-        Promise::new(who).transfer(NearToken::from_yoctonear(app.bond.0))
+        Self::pay(who, app.bond.0)
     }
 
     /// A panel fund names (or, with `null`, clears) the account allowed to audit
@@ -590,12 +596,13 @@ impl Nema {
             "contract": env::current_account_id(),
             "round_id": id,
         });
-        self.request_enclave(input, attached, env::predecessor_account_id())
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_static_gas(CALLBACK_GAS)
-                    .on_round_key(id),
-            )
+        let payer = env::predecessor_account_id();
+        let (call, fee) = self.request_enclave(input, attached, &payer);
+        call.then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(CALLBACK_GAS)
+                .on_round_key(id, payer, U128(fee)),
+        )
     }
 
     /// Submit (or replace) a fund's encrypted mark. The latest submission before the
@@ -658,9 +665,7 @@ impl Nema {
         if round.status == RoundStatus::AwaitingKey {
             round.status = RoundStatus::Failed;
             round.last_error = Some("the round never received its key from the enclave".into());
-            return PromiseOrValue::Promise(
-                Promise::new(caller).transfer(NearToken::from_yoctonear(attached)),
-            );
+            return PromiseOrValue::Promise(Self::pay(caller, attached));
         }
 
         // A fund removed from the panel before the round closed doesn't count: the
@@ -682,9 +687,7 @@ impl Nema {
                 round.submissions.len(),
                 min
             ));
-            return PromiseOrValue::Promise(
-                Promise::new(caller).transfer(NearToken::from_yoctonear(attached)),
-            );
+            return PromiseOrValue::Promise(Self::pay(caller, attached));
         }
 
         let set_hash = compute_set_hash(&round.submissions);
@@ -699,11 +702,12 @@ impl Nema {
             json!({"round_id": round_id, "set_hash": set_hash, "by": caller}),
         );
 
+        let (call, fee) = self.request_enclave(input, attached, &caller);
         PromiseOrValue::Promise(
-            self.request_enclave(input, attached, caller).then(
+            call.then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(CALLBACK_GAS)
-                    .on_tally(round_id),
+                    .on_tally(round_id, caller, U128(fee)),
             ),
         )
     }
@@ -849,12 +853,12 @@ impl Nema {
             "audit_requested",
             json!({"audit_id": id, "round_id": round_id, "auditor": auditor}),
         );
-        self.request_enclave(input, attached - STORAGE_DEPOSIT, auditor)
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_static_gas(CALLBACK_GAS)
-                    .on_audit(id),
-            )
+        let (call, fee) = self.request_enclave(input, attached - STORAGE_DEPOSIT, &auditor);
+        call.then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(CALLBACK_GAS)
+                .on_audit(id, auditor, U128(fee)),
+        )
     }
 
     /// Pay out the caller's share of read fees. If the transfer fails, the
@@ -863,15 +867,11 @@ impl Nema {
         let who = env::predecessor_account_id();
         let amount = self.earnings.remove(&who).unwrap_or(0);
         require!(amount > 0, "nothing to withdraw");
-        Promise::new(who.clone())
-            .transfer(NearToken::from_yoctonear(amount))
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_static_gas(CALLBACK_GAS)
-                    .on_withdrawn(who, U128(amount)),
-            )
+        Self::pay(who, amount)
     }
 
+    /// After any payment: if it bounced (say the account was deleted), the amount
+    /// is credited to the account's earnings instead of being lost.
     #[private]
     pub fn on_withdrawn(
         &mut self,
@@ -882,7 +882,7 @@ impl Nema {
         if result.is_err() {
             *self.earnings.entry(account.clone()).or_insert(0) += amount.0;
             emit(
-                "withdrawal_failed",
+                "payment_failed",
                 json!({"account": account, "amount": amount}),
             );
         }
@@ -894,15 +894,12 @@ impl Nema {
     /// back to CloseFailed, so anyone can close it again. Anyone may call this.
     pub fn reconcile_round(&mut self, round_id: u64) {
         let key = format!("r{round_id}");
-        let since = self.stale_since(&key);
-        let round = self
+        let waiting = self
             .rounds
-            .get_mut(&round_id)
-            .unwrap_or_else(|| env::panic_str("no such round"));
-        require!(
-            round.status == RoundStatus::Closing,
-            "the round is not waiting on the enclave"
-        );
+            .get(&round_id)
+            .is_some_and(|r| r.status == RoundStatus::Closing);
+        let since = self.stale_since(&key, waiting);
+        let round = self.rounds.get_mut(&round_id).expect("checked above");
         round.status = RoundStatus::CloseFailed;
         round.last_error = Some("the enclave never answered; close the round again".into());
         self.pending_since.remove(&key);
@@ -916,15 +913,12 @@ impl Nema {
     /// delivery that turns up later is ignored. Anyone may call this.
     pub fn reconcile_read(&mut self, purchase_id: u64) -> PromiseOrValue<()> {
         let key = format!("p{purchase_id}");
-        let since = self.stale_since(&key);
-        let p = self
+        let waiting = self
             .purchases
-            .get_mut(&purchase_id)
-            .unwrap_or_else(|| env::panic_str("no such read"));
-        require!(
-            p.status == PurchaseStatus::Pending,
-            "the read is not waiting on the enclave"
-        );
+            .get(&purchase_id)
+            .is_some_and(|p| p.status == PurchaseStatus::Pending);
+        let since = self.stale_since(&key, waiting);
+        let p = self.purchases.get_mut(&purchase_id).expect("checked above");
         p.status = PurchaseStatus::Refunded;
         p.error = Some("the enclave never answered; the read price was refunded".into());
         let (buyer, price) = (p.buyer.clone(), p.price.0);
@@ -934,7 +928,7 @@ impl Nema {
             json!({"purchase_id": purchase_id, "pending_since": U64(since), "refund": U128(price)}),
         );
         if price > 0 {
-            PromiseOrValue::Promise(Promise::new(buyer).transfer(NearToken::from_yoctonear(price)))
+            PromiseOrValue::Promise(Self::pay(buyer, price))
         } else {
             PromiseOrValue::Value(())
         }
@@ -944,15 +938,12 @@ impl Nema {
     /// auditor can ask again. Anyone may call this.
     pub fn reconcile_audit(&mut self, audit_id: u64) {
         let key = format!("a{audit_id}");
-        let since = self.stale_since(&key);
-        let audit = self
+        let waiting = self
             .audits
-            .get_mut(&audit_id)
-            .unwrap_or_else(|| env::panic_str("no such audit"));
-        require!(
-            audit.status == AuditStatus::Pending,
-            "the audit is not waiting on the enclave"
-        );
+            .get(&audit_id)
+            .is_some_and(|a| a.status == AuditStatus::Pending);
+        let since = self.stale_since(&key, waiting);
+        let audit = self.audits.get_mut(&audit_id).expect("checked above");
         audit.status = AuditStatus::Failed;
         audit.error = Some("the enclave never answered; ask again".into());
         self.pending_since.remove(&key);
@@ -963,42 +954,27 @@ impl Nema {
     }
 
     // ---- enclave callbacks (never panic: a panic would revert the state change and
-    // leave the round or purchase stuck) ----
+    // leave the round or purchase stuck). They read the result themselves, so even
+    // bytes that are not JSON become a recorded failure. ----
 
     #[private]
-    pub fn on_round_key(
-        &mut self,
-        round_id: u64,
-        #[callback_result] result: Result<Value, PromiseError>,
-    ) {
-        self.apply_round_key(round_id, outcome(result));
+    pub fn on_round_key(&mut self, round_id: u64, payer: AccountId, fee: U128) {
+        self.apply_round_key(round_id, enclave_answer(payer, fee));
     }
 
     #[private]
-    pub fn on_tally(
-        &mut self,
-        round_id: u64,
-        #[callback_result] result: Result<Value, PromiseError>,
-    ) {
-        self.apply_tally(round_id, outcome(result));
+    pub fn on_tally(&mut self, round_id: u64, payer: AccountId, fee: U128) {
+        self.apply_tally(round_id, enclave_answer(payer, fee));
     }
 
     #[private]
-    pub fn on_deliver(
-        &mut self,
-        purchase_id: u64,
-        #[callback_result] result: Result<Value, PromiseError>,
-    ) {
-        self.apply_delivery(purchase_id, outcome(result));
+    pub fn on_deliver(&mut self, purchase_id: u64, payer: AccountId, fee: U128) {
+        self.apply_delivery(purchase_id, enclave_answer(payer, fee));
     }
 
     #[private]
-    pub fn on_audit(
-        &mut self,
-        audit_id: u64,
-        #[callback_result] result: Result<Value, PromiseError>,
-    ) {
-        self.apply_audit(audit_id, outcome(result));
+    pub fn on_audit(&mut self, audit_id: u64, payer: AccountId, fee: U128) {
+        self.apply_audit(audit_id, enclave_answer(payer, fee));
     }
 
     // ---- views ----
@@ -1150,12 +1126,11 @@ impl Nema {
     }
 
     /// When the call behind `key` went out, if it is old enough to settle. Fails
-    /// closed: no record (or too recent) means it can't be settled yet.
-    fn stale_since(&self, key: &str) -> u64 {
-        let since = *self
-            .pending_since
-            .get(key)
-            .unwrap_or_else(|| env::panic_str("nothing is waiting on the enclave here"));
+    /// closed: nothing waiting, or too recent, means it can't be settled. A call made
+    /// before this record existed (an earlier build) has none and counts as old.
+    fn stale_since(&self, key: &str, waiting: bool) -> u64 {
+        require!(waiting, "nothing is waiting on the enclave here");
+        let since = self.pending_since.get(key).copied().unwrap_or(0);
         require!(
             env::block_timestamp() >= since.saturating_add(STALE_AFTER_NS),
             "the enclave may still answer; try again 30 minutes after the request"
@@ -1163,7 +1138,13 @@ impl Nema {
         since
     }
 
-    fn request_enclave(&self, input: Value, deposit: u128, payer: AccountId) -> Promise {
+    /// Sends `input` to the enclave with at most MAX_OUTLAYER_DEPOSIT of `deposit`
+    /// (the rest goes back to `payer`), and returns the call and the fee it carries.
+    fn request_enclave(&self, input: Value, deposit: u128, payer: &AccountId) -> (Promise, u128) {
+        let fee = deposit.min(MAX_OUTLAYER_DEPOSIT);
+        if deposit > fee {
+            Self::pay(payer.clone(), deposit - fee);
+        }
         let source = json!({"Project": {"project_id": self.project_id, "version_key": null}});
         let limits = json!({
             "max_instructions": 10_000_000_000u64,
@@ -1174,8 +1155,8 @@ impl Nema {
             "profile": self.secrets_profile,
             "account_id": self.secrets_account,
         });
-        ext_outlayer::ext(self.outlayer_id.clone())
-            .with_attached_deposit(NearToken::from_yoctonear(deposit))
+        let call = ext_outlayer::ext(self.outlayer_id.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(fee))
             .with_unused_gas_weight(1)
             .request_execution(
                 source,
@@ -1183,7 +1164,20 @@ impl Nema {
                 Some(input.to_string()),
                 Some(secrets_ref),
                 Some("Json".to_string()),
-                Some(payer),
+                Some(payer.clone()),
+            );
+        (call, fee)
+    }
+
+    /// Pays `amount` to `to`; if the transfer fails, `on_withdrawn` credits it to
+    /// their earnings, so a refund or bond is never lost.
+    fn pay(to: AccountId, amount: u128) -> Promise {
+        Promise::new(to.clone())
+            .transfer(NearToken::from_yoctonear(amount))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(PAY_GAS)
+                    .on_withdrawn(to, U128(amount)),
             )
     }
 
@@ -1261,10 +1255,11 @@ impl Nema {
             json!({"purchase_id": id, "round_id": round_id, "buyer": buyer, "basis": basis}),
         );
 
-        self.request_enclave(input, enclave_deposit, buyer).then(
+        let (call, fee) = self.request_enclave(input, enclave_deposit, &buyer);
+        call.then(
             Self::ext(env::current_account_id())
                 .with_static_gas(CALLBACK_GAS)
-                .on_deliver(id),
+                .on_deliver(id, buyer, U128(fee)),
         )
     }
 
@@ -1440,8 +1435,7 @@ impl Nema {
                 p.status = PurchaseStatus::Refunded;
                 p.error = Some(clip(reason));
                 if purchase.price.0 > 0 {
-                    Promise::new(purchase.buyer.clone())
-                        .transfer(NearToken::from_yoctonear(purchase.price.0));
+                    Self::pay(purchase.buyer.clone(), purchase.price.0);
                 }
                 emit(
                     "read_refunded",
@@ -1588,9 +1582,30 @@ fn clip(mut s: String) -> String {
     s
 }
 
+/// The enclave's answer to the call this callback follows. If OutLayer refused the
+/// call itself, NEAR returned its fee here, so it goes back to the payer. Bytes that
+/// are not JSON are a failure, not a panic.
+fn enclave_answer(payer: AccountId, fee: U128) -> Result<Value, String> {
+    match env::promise_result(0) {
+        PromiseResult::Successful(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+            Ok(v) => outcome(Ok(v)),
+            Err(_) => Err("the enclave returned something that is not JSON".into()),
+        },
+        PromiseResult::Failed => {
+            if fee.0 > 0 {
+                Nema::pay(payer.clone(), fee.0);
+                emit(
+                    "enclave_fee_refunded",
+                    json!({"account": payer, "amount": fee}),
+                );
+            }
+            outcome(Err(PromiseError::Failed))
+        }
+    }
+}
+
 /// OutLayer hands back the enclave's own JSON output, or `null` when the run
-/// failed or produced nothing. Any JSON parses as a `Value`, so the callback
-/// itself never fails to deserialize.
+/// failed or produced nothing.
 fn outcome(r: Result<Value, PromiseError>) -> Result<Value, String> {
     match r {
         Ok(Value::Null) => Err("the enclave run failed or returned nothing".into()),
@@ -1640,10 +1655,12 @@ fn validate_ciphertext_hex(s: &str) {
     );
 }
 
+/// Lowercase only, so one key has one spelling and the duplicate-read check can
+/// compare strings.
 fn is_compressed_pubkey(s: &str) -> bool {
     s.len() == 66
         && (s.starts_with("02") || s.starts_with("03"))
-        && s.chars().all(|c| c.is_ascii_hexdigit())
+        && s.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))
 }
 
 fn is_hex_of_len(s: &str, len: usize) -> bool {

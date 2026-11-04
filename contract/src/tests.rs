@@ -1434,3 +1434,205 @@ fn the_wait_is_visible_until_the_call_settles() {
     c.apply_tally(1, Ok(good_tally(&h)));
     assert_eq!(c.get_pending_since("round".into(), U64(1)), None);
 }
+
+// ---- money never strands: fees, refunds and payments that bounce ----
+
+/// The callback context: the contract calling itself, with `result` as the
+/// answer to the enclave call it follows. (The macro form needs near-parameters,
+/// which this crate doesn't depend on.)
+#[allow(deprecated)]
+fn answered(result: PromiseResult, secs: u64) {
+    near_sdk::test_utils::testing_env_with_promise_results(
+        ctx(&near_sdk::test_utils::accounts(0), 0, secs),
+        result,
+    );
+}
+
+fn events() -> Vec<String> {
+    near_sdk::test_utils::get_logs()
+        .iter()
+        .filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| serde_json::from_str::<Value>(j).unwrap())
+        .filter(|e| e["standard"] == "nema")
+        .map(|e| e["event"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn a_fee_above_the_cap_goes_straight_back() {
+    let mut c = published();
+    let extra = 3 * MAX_OUTLAYER_DEPOSIT;
+    testing_env!(ctx(&buyer(), PRICE + STORAGE_DEPOSIT + extra, 1100));
+    let _ = c.buy_read(1, pubkey());
+    assert_eq!(refunded_to(&buyer()), extra - MAX_OUTLAYER_DEPOSIT);
+}
+
+#[test]
+fn a_refused_enclave_call_returns_the_fee_and_the_price() {
+    let mut c = published();
+    let id = buy(&mut c);
+    answered(PromiseResult::Failed, 1101);
+    c.on_deliver(id, buyer(), U128(MIN_OUTLAYER_DEPOSIT));
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Refunded);
+    assert_eq!(refunded_to(&buyer()), PRICE + MIN_OUTLAYER_DEPOSIT);
+    assert!(events().contains(&"enclave_fee_refunded".to_string()));
+}
+
+#[test]
+fn an_answer_that_is_not_json_is_a_failure_not_a_panic() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    answered(
+        PromiseResult::Successful(b"<html>502</html>".to_vec()),
+        1002,
+    );
+    c.on_tally(1, accounts(1), U128(DEPOSIT));
+    assert_eq!(status(&c), RoundStatus::CloseFailed);
+    assert_eq!(
+        refunded_to(&accounts(1)),
+        0,
+        "OutLayer kept the fee for a run it made"
+    );
+}
+
+#[test]
+fn a_good_answer_through_the_callback_publishes() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    let h = set_hash(&c);
+    answered(
+        PromiseResult::Successful(good_tally(&h).to_string().into_bytes()),
+        1002,
+    );
+    c.on_tally(1, accounts(1), U128(DEPOSIT));
+    assert_eq!(status(&c), RoundStatus::Published);
+}
+
+#[test]
+fn a_payment_that_bounces_is_kept_as_earnings() {
+    let mut c = fresh();
+    c.on_withdrawn(buyer(), U128(PRICE), Err(PromiseError::Failed));
+    assert_eq!(c.get_earnings(buyer()).0, PRICE);
+}
+
+#[test]
+fn a_payment_that_lands_is_not_credited_again() {
+    let mut c = fresh();
+    c.on_withdrawn(buyer(), U128(PRICE), Ok(()));
+    assert_eq!(c.get_earnings(buyer()).0, 0);
+}
+
+#[test]
+fn withdrawing_pays_the_whole_balance() {
+    let mut c = published();
+    let id = buy(&mut c);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    let f = funds()[0].clone();
+    let owed = c.get_earnings(f.clone()).0;
+    assert!(owed > 0);
+    testing_env!(ctx(&f, 0, 1200));
+    let _ = c.withdraw();
+    assert_eq!(refunded_to(&f), owed);
+}
+
+#[test]
+fn every_bond_is_paid_back() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    testing_env!(ctx(&owner(), 0, 130));
+    let _ = c.approve(applicant());
+    assert_eq!(refunded_to(&applicant()), BOND, "approved");
+
+    let mut c = fresh();
+    apply_now(&mut c);
+    testing_env!(ctx(&owner(), 0, 130));
+    let _ = c.reject(applicant());
+    assert_eq!(refunded_to(&applicant()), BOND, "rejected");
+
+    let mut c = fresh();
+    apply_now(&mut c);
+    testing_env!(ctx(&applicant(), 0, 140));
+    let _ = c.withdraw_application();
+    assert_eq!(refunded_to(&applicant()), BOND, "withdrawn");
+}
+
+// ---- duplicates and late answers ----
+
+#[test]
+#[should_panic(expected = "compressed secp256k1")]
+fn a_key_in_capitals_is_refused() {
+    let mut c = published();
+    testing_env!(ctx(&buyer(), PRICE + READ, 1100));
+    let _ = c.buy_read(1, pubkey().to_uppercase());
+}
+
+#[test]
+fn a_late_delivery_is_logged_and_ignored() {
+    let mut c = published();
+    let id = buy(&mut c);
+    testing_env!(ctx(&accounts(2), 0, 1100 + 30 * 60));
+    let _ = c.reconcile_read(id);
+    assert_eq!(c.get_pending_since("read".into(), U64(id)), None);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    assert!(events().contains(&"callback_ignored".to_string()));
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Refunded);
+}
+
+#[test]
+fn a_late_audit_after_settling_is_ignored() {
+    let mut c = with_open_round();
+    let f = funds()[1].clone();
+    name_auditor(&mut c, &f);
+    submit_from(&mut c, &f, 9);
+    close(&mut c);
+    testing_env!(ctx(&auditor(), READ, 1100));
+    let _ = c.request_audit(1, f, pubkey());
+    testing_env!(ctx(&accounts(2), 0, 1100 + 30 * 60));
+    c.reconcile_audit(1);
+    assert_eq!(c.get_pending_since("audit".into(), U64(1)), None);
+    c.apply_audit(1, Ok(json!({"ok": true, "sealed": sealed()})));
+    let a = &c.get_audits_of(auditor())[0];
+    assert_eq!((a.status, a.sealed.clone()), (AuditStatus::Failed, None));
+}
+
+#[test]
+fn a_late_key_for_an_ended_round_is_ignored() {
+    let mut c = fresh();
+    for f in funds() {
+        c.add_member(f);
+    }
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    testing_env!(ctx(&accounts(1), DEPOSIT, 1001));
+    let _ = c.close_round(1);
+    assert_eq!(status(&c), RoundStatus::Failed);
+    c.apply_round_key(1, Ok(json!({ "ok": true, "pubkey": pubkey() })));
+    assert_eq!(status(&c), RoundStatus::Failed);
+    assert_eq!(c.get_round(U64(1)).unwrap().pubkey, None);
+}
+
+#[test]
+fn settling_a_tally_clears_the_wait() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    testing_env!(ctx(&accounts(2), 0, 1001 + 30 * 60));
+    c.reconcile_round(1);
+    assert_eq!(c.get_pending_since("round".into(), U64(1)), None);
+}
+
+#[test]
+fn a_read_from_before_the_wait_was_recorded_can_still_be_settled() {
+    let mut c = published();
+    let id = buy(&mut c);
+    c.pending_since.remove(&format!("p{id}")); // as if made by the previous build
+                                               // Too soon for a read recorded at 1100s, but one with no record counts as old.
+    testing_env!(ctx(&accounts(2), 0, 30 * 60));
+    let _ = c.reconcile_read(id);
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Refunded);
+    assert_eq!(refunded_to(&buyer()), PRICE);
+}

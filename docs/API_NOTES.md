@@ -11,8 +11,10 @@ The docs suggested an envelope like `{ success, output, error }`. The contract
 first deserialized into that and every callback failed with
 `missing field success`. In fact the callback's promise result is whatever the
 module printed to stdout, parsed as JSON. When the run fails (module error,
-limits hit, no worker), it is `null`. So the contract takes a raw `Value` and
-treats `null` as a failed run (`outcome()` in `contract/src/lib.rs`). The test
+limits hit, no worker), it is `null`. So the callbacks read the raw promise
+result themselves (`enclave_answer()` in `contract/src/lib.rs`): `null` is a failed
+run, and bytes that are not JSON are a failure too rather than a deserialization
+panic, which would revert the callback and leave the call waiting. The test
 `outcome_maps_enclave_responses` uses the exact bytes testnet returned.
 
 **It is asynchronous, and success means "accepted".**
@@ -39,10 +41,17 @@ that is not refunded is refused before any OutLayer call is made
 (`retrying_a_read_with_the_same_key_does_not_pay_twice`).
 
 **The deposit is a fee cap.**
-The contract attaches the enclave fee (0.01 NEAR) and names the user who paid it
-as `payer`, the account OutLayer's interface returns unused deposit to. We have
-not measured how much comes back per run, or whether a failed run is charged in
-full.
+The contract forwards the caller's enclave fee (0.01 NEAR from the app, at most
+0.05 NEAR; any surplus goes straight back) and names the caller as `payer`, the
+account OutLayer's interface returns unused deposit to. We have not measured how
+much comes back per run, or whether a failed run is charged in full.
+
+**If OutLayer refuses the call itself, the fee comes back to the contract, not the
+payer.** That is NEAR's rule: a failed receipt refunds its deposit to whoever sent
+it, which is the Nema contract. The callback then sees a failed promise rather
+than a value, so it passes the fee on to the payer (`enclave_fee_refunded`). A run
+OutLayer accepted and then failed arrives as `null`, not as a failed promise, and
+the fee is not returned by Nema.
 
 **`NEAR_PREDECESSOR_ID` is the calling contract.**
 The enclave's caller check (`req.contract() != predecessor`) rests on this. The
