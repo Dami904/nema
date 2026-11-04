@@ -9,8 +9,8 @@ What Nema does not do yet, or does only partly. Each item says why.
   redeploy the contract or change the enclave's secret lock, and with either can
   expose marks. Removing the key is permanent, so it waits for the final deploy.
   See [THREAT_MODEL.md](THREAT_MODEL.md).
-- **The live rounds are test rounds.** Round 2 ran in full with four funds, a
-  lender and an auditor, but all of them are accounts the author controls.
+- **The live rounds are test rounds.** Rounds 2 and 3 ran in full with four
+  funds, a lender and an auditor, but all of them are accounts the author controls.
 - **One OutLayer project, one master secret, no rotation.** A new secret means new
   round keys; old rounds stay tied to the old secret.
 - **No limit on how many rounds a reader can combine.** Results from many rounds
@@ -37,11 +37,12 @@ What Nema does not do yet, or does only partly. Each item says why.
   stale round, read and audit in one pass (`--dry-run` to look first). Nothing
   runs it on a schedule, since that would need a signing key on a server. In
   every testnet run so far the callback did arrive.
-- **The reliability features have not run live yet.** Settling stuck calls,
-  dropping removed funds at close, refusing duplicate reads, re-checking the
-  auditor on delivery and the NEP-297 events are deployed on testnet
-  (`05e0b58e…`, round 2 intact through each upgrade) and covered by 117 contract
-  tests, but no round has run on this build yet.
+- **The failure paths have only run in tests.** Round 3 ran on the current build
+  (`05e0b58e…`): storage deposits on marks, the tally, free and paid reads, equal
+  shares to the funds, an audit, and the refusals of a second free copy and of an
+  audit by the wrong account. Settling a stuck call, dropping a removed fund at
+  close, a bounced payment and a refused enclave call have never happened live;
+  117 contract tests cover them.
 - **Enclave quotes are checked, revocation is not.** The browser checks the chain
   to Intel's root and the measurements, not Intel's TCB status or revocation
   lists.

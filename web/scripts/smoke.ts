@@ -139,6 +139,9 @@ const after = await Promise.all(funds.map((f) => view<string>("get_earnings", { 
 check("each fund was credited an equal share", after.every((a, i) => BigInt(a) - BigInt(earned[i]) === share), `${share} yocto each`);
 
 // ---- an auditor opens one fund's own mark ----
+// Marks went in in the order of the run that opened the round, which a resumed
+// run may list differently.
+const markOf = (account: string) => MARKS[subs.findIndex((s) => s.account === account)];
 const audited = funds[funds.length - 1];
 call(audited, "set_auditor", { auditor: lender });
 const late = await view<Basis | null>("get_free_basis", { round_id: id, account: lender });
@@ -147,7 +150,7 @@ const ask = new PrivateKey();
 call(lender, "request_audit", { round_id: Number(id), fund: audited, auditor_pubkey: ask.publicKey.toHex(true) }, READ_EXTRA_YOCTO, 300);
 const audit = await until("the audit", async () => (await view<AuditCopy[]>("get_audits_of", { auditor: lender })).find((a) => a.round_id === id && a.fund === audited), (a) => !!a && a.status !== "Pending");
 check("the enclave opened the fund's mark for its auditor", audit!.status === "Delivered", audit!.error ?? "");
-if (audit!.sealed) check("the auditor sees exactly what the fund sent", openAudit(ask.toHex(), audit!.sealed).mark === MARKS[funds.length - 1]);
+if (audit!.sealed) check("the auditor sees exactly what the fund sent", openAudit(ask.toHex(), audit!.sealed).mark === markOf(audited));
 let refused = false;
 try {
   call(funds[0], "request_audit", { round_id: Number(id), fund: audited, auditor_pubkey: ask.publicKey.toHex(true) }, READ_EXTRA_YOCTO, 300);

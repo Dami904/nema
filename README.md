@@ -94,7 +94,7 @@ for a look around:
 | ------- | ---------------------------------------------------------------------------------------- |
 | **156** | automated tests passing: 117 contract, 32 enclave, 7 browser crypto checks               |
 | **19**  | safety guards, each removed in turn to confirm a test fails without it                   |
-| **17**  | checks in the live smoke test, all passing on testnet round 2                            |
+| **17**  | checks in the live smoke test: all passing on round 2, rerun on round 3 (current build)   |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
 | **4**   | valid marks at minimum before anything is published                                      |
 
@@ -382,7 +382,7 @@ and ignoring a tally that answers an earlier close.
 | The contract reads OutLayer's real response | `outcome_maps_enclave_responses`, using the exact bytes OutLayer returned on testnet |
 | Browser, contract and enclave agree byte for byte | the set hash, commitment and sealing vectors in [`testdata/`](testdata), checked by all three |
 | Every enclave run is the published build, asked for by the contract | `pnpm live:check-attest` on jobs 16942, 16947, 16954 and 16956: all checks pass |
-| The whole flow works on the live network | `pnpm live:smoke`: 17 of 17 on round 2 |
+| The whole flow works on the live network | `pnpm live:smoke`: 17 of 17 on round 2; on round 3, the current build, 16 of 17 (the audit-value check compared the wrong fund's mark in a rerun with the funds reordered; the script now looks marks up by account) |
 
 ---
 
@@ -403,7 +403,7 @@ and ignoring a tally that answers an earlier close.
 
 - **Sample mode is sample data.** The **Sample** switch fills every screen with made-up funds, rounds and reads (Calder Logistics, Kestrel Software and others), so each state can be seen without a wallet. Nothing in it touches the chain.
 - **Live mode is real.** It reads `nema-dev.testnet`, and every action is a signed NEAR testnet transaction.
-- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; round 1 ended without a key while a contract bug was being fixed.
+- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; round 3 ran on the current build (`05e0b58e…`) on 2026-11-04; round 1 ended without a key while a contract bug was being fixed.
 - **Testnet only.** No real money moves.
 
 ---
