@@ -103,6 +103,9 @@ export function useLoad<T>(load: (s: Source) => Promise<T>, deps: unknown[]): { 
     return () => {
       alive = false;
     };
+    // The caller passes what `load` reads as `deps`; `load` itself is a new
+    // closure every render and would reload on each one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, version, ...deps]);
   return { data, error };
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Empty, Gauge, LoanTitle, Skeleton, StatusPill } from "../components/bits";
+import { Settle } from "../components/Settle";
 import { useToast } from "../components/Toaster";
 import { TrackRecord } from "../components/TrackRecord";
 import { useAccount } from "../lib/account";
@@ -168,6 +169,7 @@ function AuditCard({ fund, round, state, read }: { fund: string; round: Round; s
         </p>
       )}
       {state?.kind === "pending" && <p className="note">The enclave is opening this mark for you…</p>}
+      {state?.kind === "pending" && state.audit.status === "Pending" && <Settle kind="audit" id={state.audit.id} />}
       {state?.kind === "locked" && <p className="note">Sealed to a key this device doesn't hold. Restore your key backup from the Vault.</p>}
       {state?.kind === "failed" && <p className="note bad">The enclave couldn't open it: {state.audit.error ?? "unknown error"}.</p>}
       <div className="audit-actions">

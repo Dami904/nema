@@ -8,7 +8,8 @@
 
 Sealed marks in. One consensus out. Nobody sees a single price.
 
-[![Tests](https://img.shields.io/badge/tests-121%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-136%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
@@ -91,7 +92,8 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **121** | automated tests passing: 82 contract, 32 enclave, 7 browser crypto checks                |
+| **136** | automated tests passing: 97 contract, 32 enclave, 7 browser crypto checks                |
+| **11**  | safety guards, each removed in turn to confirm a test fails without it                   |
 | **17**  | checks in the live smoke test, all passing on testnet round 2                            |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
 | **4**   | valid marks at minimum before anything is published                                      |
@@ -104,8 +106,8 @@ curl -s https://rpc.testnet.fastnear.com -H 'content-type: application/json' -d 
   | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Buffer.from(JSON.parse(s).result.result).toString()))'
 
 # The Intel TDX quote behind round 2's tally, checked end to end
-git clone https://github.com/Dami904/nema && cd nema/web && npm ci
-npm run check-attest -- --job 16947 --network testnet --contract nema-dev.testnet
+git clone https://github.com/Dami904/nema && cd nema && pnpm install && cd web
+pnpm live:check-attest --job 16947 --network testnet --contract nema-dev.testnet
 ```
 
 ---
@@ -135,7 +137,7 @@ npm run check-attest -- --job 16947 --network testnet --contract nema-dev.testne
 
 Round 2 ran in full on 2026-11-03: four funds, a lender and an auditor, every step
 a transaction you can open. The enclave runs are OutLayer jobs whose Intel quotes
-pass every check (`npm run check-attest -- --job <id> --network testnet --contract nema-dev.testnet`).
+pass every check (`pnpm live:check-attest --job <id> --network testnet --contract nema-dev.testnet`).
 
 | What happened | Transactions | Enclave run |
 | --- | --- | --- |
@@ -148,7 +150,7 @@ pass every check (`npm run check-attest -- --job <id> --network testnet --contra
 | **fund4 named an auditor, who had the enclave open fund4's mark**, exactly as fund4 sent it | [name](https://testnet.nearblocks.io/txns/ckEgnMEotxSKDFZkxnnbuUZviQKfDDmbeQkTbQD65HY) · [audit](https://testnet.nearblocks.io/txns/DTqbegvLFZQ5ZjECCBTteio2W2jm2vfMBTEyuYf9V52c) | job 16956 ✓ |
 | **Another fund tried to audit fund4**: refused | [refused](https://testnet.nearblocks.io/txns/2SpLVSaZnC1fyF7D48AWkoEtUGdot7uxYKrwR4aUWmKn) | none, by design |
 
-The run is `npm run smoke` in [`web/scripts/smoke.ts`](web/scripts/smoke.ts): 17 checks, all passing.
+The run is `pnpm live:smoke` in [`web/scripts/smoke.ts`](web/scripts/smoke.ts): 17 checks, all passing.
 
 ---
 
@@ -239,7 +241,7 @@ flowchart TD
 
 | Path | Role |
 | --- | --- |
-| [`contract/`](contract) | The NEAR contract (near-sdk 5.17), 82 tests |
+| [`contract/`](contract) | The NEAR contract (near-sdk 5.17), 97 tests |
 | [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 32 tests |
 | [`web/`](web) | The app (React, Vite): seven pages, sample data for every state, wallet sign-in |
 | [`web/scripts/`](web/scripts) | `smoke` (one full live round), `close-rounds`, `check-attest`, `test` (crypto vectors) |
@@ -290,7 +292,7 @@ stateDiagram-v2
     Open --> Closing: closed after the deadline
     Open --> Failed: fewer than 4 submitted
     Closing --> Published: tally committed
-    Closing --> CloseFailed: enclave run failed
+    Closing --> CloseFailed: enclave run failed, or no answer in 30 minutes
     CloseFailed --> Closing: anyone retries
     Published --> [*]
     Failed --> [*]
@@ -298,6 +300,16 @@ stateDiagram-v2
 
 A read is `Pending` until the enclave seals it, then `Delivered`, or `Refunded` if
 the enclave run fails, so a failed call never keeps a lender's money.
+
+Every call to the enclave has three outcomes, not two: it answered, it failed, or
+nothing came back yet. The contract records when each call went out
+(`get_pending_since`). If no answer arrives in 30 minutes, anyone can settle it
+(`reconcile_round`, `reconcile_read`, `reconcile_audit`, a **Settle** button in the
+app): the close can be retried, the read is refunded, the audit can be asked again.
+An answer that lands afterwards is ignored. Every state change is logged as a
+NEP-297 event (`EVENT_JSON:{"standard":"nema",…}`), so an indexer can follow a round
+without polling. What OutLayer actually did on testnet, as opposed to what its
+docs said, is in [docs/API_NOTES.md](docs/API_NOTES.md).
 
 ---
 
@@ -330,16 +342,26 @@ if set_hash != expected_set_hash {
 - **The secret is locked twice.** OutLayer releases the master secret only to Nema's exact build (`WasmHash`) requested through Nema's contract (`Predecessor`). A rebuild, or the same build called by anyone else, gets nothing.
 - **A copied ciphertext is rejected.** Each fund encrypts its own account next to its mark, so replaying another fund's ciphertext gets it dropped and named.
 - **Integer arithmetic only**: marks in hundredths, mean to 0.01, spread to 0.0001, with an exact integer square root. The browser checks every opened copy against the commitment.
-- **The callbacks never panic.** A failed enclave call is recorded on the round or the read and can be retried or refunded; it never strands state.
+- **The callbacks never panic.** A failed enclave call is recorded on the round or the read and can be retried or refunded; one that never answers is settled after 30 minutes. Nothing strands state.
+- **A retry never pays twice.** A second read for the same round and key is refused while the first is delivered or on its way.
+- **Permissions are rechecked when the answer lands.** An audit that returns after the fund changed its auditor is not delivered, and a fund removed from the panel before the close is not counted.
 
 ---
 
 ## Tested, not claimed
 
-**121 automated tests pass**: 82 contract (`cargo test` in `contract/`), 32 enclave
-(`cargo test` in `aggregator/`) and 7 browser crypto checks (`npm test` in `web/`).
-On top, the live smoke test runs 17 checks on testnet and the attestation checker
-runs 7 on real OutLayer jobs, including tampered copies that must fail.
+**136 automated tests pass**: 97 contract (`cargo test` in `contract/`), 32 enclave
+(`cargo test` in `aggregator/`) and 7 browser crypto checks (`pnpm test`). CI runs
+them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
+rebuild of both wasm files against their pinned hashes, and a scan for committed
+secrets. On top, the live smoke test runs 17 checks on testnet and the attestation
+checker runs 7 on real OutLayer jobs, including tampered copies that must fail.
+
+Each of the 11 guards that protect marks or money was deleted in turn to confirm
+some test fails without it: the committed-set check (contract and enclave), the
+caller check, copied ciphertexts, one free copy per round, auditor-only audits,
+the auditor recheck on delivery, dropping removed funds, the duplicate-read
+refusal, the 30-minute wait before settling, and the refund of a failed read.
 
 | Proof | Test |
 | --- | --- |
@@ -349,10 +371,13 @@ runs 7 on real OutLayer jobs, including tampered copies that must fail.
 | A delivery must match the published commitment | `deliver_refuses_a_commitment_that_does_not_match` |
 | A failed enclave call is recorded, not panicked | `a_failed_enclave_call_is_recorded_not_panicked` ([`contract/src/tests.rs`](contract/src/tests.rs)) |
 | A round that never got its key can be ended | `a_round_that_never_got_its_key_can_be_ended_after_its_deadline` |
+| A read that never answers is refunded and pays nobody | `a_read_that_never_answers_is_refunded_and_pays_nobody` |
+| Retrying a read does not pay twice | `retrying_a_read_with_the_same_key_does_not_pay_twice` |
+| Every read price splits exactly, nothing lost or made | `every_read_price_splits_exactly_with_nothing_lost_or_made` |
 | The contract reads OutLayer's real response | `outcome_maps_enclave_responses`, using the exact bytes OutLayer returned on testnet |
 | Browser, contract and enclave agree byte for byte | the set hash, commitment and sealing vectors in [`testdata/`](testdata), checked by all three |
-| Every enclave run is the published build, asked for by the contract | `npm run check-attest` on jobs 16942, 16947, 16954 and 16956: all checks pass |
-| The whole flow works on the live network | `npm run smoke`: 17 of 17 on round 2 |
+| Every enclave run is the published build, asked for by the contract | `pnpm live:check-attest` on jobs 16942, 16947, 16954 and 16956: all checks pass |
+| The whole flow works on the live network | `pnpm live:smoke`: 17 of 17 on round 2 |
 
 ---
 
@@ -386,7 +411,11 @@ runs 7 on real OutLayer jobs, including tampered copies that must fail.
 - **A fund can still lie inside the valid range.** Out-of-range marks are caught; a plausible wrong mark is not. Its track record, and its auditor, are how that shows over time.
 - **The owner admits funds.** A panel of four accounts one person controls would make the minimum meaningless, so who is on the panel matters, and it is public.
 
-More in [DESIGN.md](DESIGN.md).
+- **The contract account still holds a full-access key.** Whoever has it could redeploy the contract or re-lock the enclave's secret, and expose marks. The site shows the deployed code hash so a change is visible; removing the key after the final deploy closes this.
+
+Who is trusted for what, what each key can do if stolen, and what is not defended:
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). What is not done yet:
+[docs/LIMITATIONS.md](docs/LIMITATIONS.md). More in [DESIGN.md](DESIGN.md).
 
 ---
 
@@ -411,9 +440,9 @@ NEAR testnet:
 
 | What | Where |
 | --- | --- |
-| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `1820d2114b0f576bc811f418f7e07a046a1aa7a4b6035b4cf6e4b494253abfa2` |
+| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `4056da77428458ccead8aae2ae518a7de8065a23721753bc32ee40c491a23413` |
 | Enclave project | OutLayer `nema-dev.testnet/nema-aggregator` |
-| Enclave build | [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproducible with Rust 1.96) |
+| Enclave build | [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproduces with Rust 1.96 on Windows with `CARGO_HOME=C:\Users\USER\.cargo`, since the wasm embeds that path; CI checks it) |
 | Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet]}, WasmHash(3ed58517…)]` |
 | Web app | [nema-near.vercel.app](https://nema-near.vercel.app) (Vercel, static) |
 
@@ -439,6 +468,8 @@ nema/
 │  └─ scripts/    smoke, close-rounds, check-attest, crypto vectors
 ├─ interop/       browser ↔ enclave encryption check
 ├─ testdata/      vectors shared by the contract, enclave and browser
+├─ docs/          threat model, limitations, OutLayer API notes, demo run-of-show
+├─ .github/       CI: web checks, contract, enclave, wasm hashes, secret scan
 ├─ DESIGN.md      the design in full
 └─ Cargo.toml     workspace root, so OutLayer builds the enclave from here
 ```
@@ -447,35 +478,41 @@ nema/
 
 ## Run it locally
 
-Requires Rust (1.93+, 1.96 for the reproducible enclave hash) and Node 22.18+.
+Requires Rust (1.93+; 1.96 to match the pinned hashes), Node 24 and pnpm 11
+(`corepack enable` picks up the pinned version). Nothing below needs a key, a
+wallet or a network call.
 
 ```bash
 git clone https://github.com/Dami904/nema && cd nema
+pnpm install
+
+# Web app: lint, typecheck, build and the browser crypto checks, as CI runs them
+pnpm check
+pnpm --filter nema-web dev   # http://localhost:5179, add ?demo=1 for sample data
 
 # Enclave: tests, then the same build OutLayer runs
-cd aggregator && cargo test && cd ..
+cargo test -p nema-aggregator
 rustup target add wasm32-wasip2
-cargo build --target wasm32-wasip2 --release   # target/wasm32-wasip2/release/nema-aggregator.wasm
+cargo build -p nema-aggregator --release --target wasm32-wasip2   # target/wasm32-wasip2/release/nema-aggregator.wasm
 
 # Contract: tests and build
 cd contract && cargo test && bash build.sh && cd ..
-
-# Web app
-cd web && npm ci
-npm run dev     # http://localhost:5179, add ?demo=1 for sample data
-npm test        # browser hashes and sealing against the shared vectors
 ```
 
 No environment variables are needed for testnet. To point at another contract or
 network, set the `VITE_*` values from `web/.env.example`; they end up in the
-browser bundle, so put nothing secret there. To host your own copy, import the
-repo into Vercel with the root directory set to `web`.
+browser bundle, so put nothing secret there, and lint fails on any other
+`import.meta.env` read. To host your own copy, import the repo into Vercel with
+the root directory set to `web`, or deploy from your machine with
+`pnpm live:deploy` in `web/` (builds locally, uploads the output).
+
+Scripts that sign or spend are named `live:*` and never run in CI.
 
 Run one real round on testnet and check it (signs with NEAR CLI from the OS
 keychain; about 0.06 NEAR in enclave fees, 0.06 NEAR in storage and one read price):
 
 ```bash
-npm run smoke -- --owner nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
+pnpm live:smoke --owner nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
 ```
 
 ---

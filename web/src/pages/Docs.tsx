@@ -364,7 +364,7 @@ function Verify() {
       </ol>
       <p className="muted">
         The browser doesn't check Intel's TCB status or revocation lists for the machine; OutLayer's dashboard does, and each run links to it.
-        The same checks run from the command line with <code>npm run check-attest -- --job &lt;id&gt;</code>.
+        The same checks run from the command line with <code>pnpm live:check-attest --job &lt;id&gt;</code>.
       </p>
     </Section>
   );

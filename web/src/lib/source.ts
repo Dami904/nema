@@ -18,7 +18,11 @@ export type Source = {
   auditsOf(auditor: string): Promise<AuditCopy[]>;
   /** Why `account` may read a published round for free, or null if it pays. */
   freeBasis(roundId: string, account: string): Promise<Basis | null>;
+  /** When a call still waiting on the enclave was made (ns), or null if nothing waits. */
+  pendingSince(kind: PendingKind, id: string): Promise<string | null>;
 };
+
+export type PendingKind = "round" | "read" | "audit";
 
 const PAGE = 50;
 
@@ -42,6 +46,7 @@ export const live: Source = {
   clientsOf: (auditor) => view("get_clients_of", { auditor }),
   auditsOf: (auditor) => view("get_audits_of", { auditor }),
   freeBasis: (roundId, account) => view("get_free_basis", { round_id: roundId, account }),
+  pendingSince: (kind, id) => view("get_pending_since", { kind, id }),
 };
 
 export const demo: Source = {
@@ -65,4 +70,5 @@ export const demo: Source = {
     if (counted.includes(account)) return "Contributed";
     return counted.some((c) => auditors[c] === account) ? "Audit" : null;
   },
+  pendingSince: async () => null,
 };

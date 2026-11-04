@@ -129,7 +129,8 @@ export async function requestOf(att: Attestation, net = NET): Promise<Requested 
     for (const log of outcome.logs) {
       if (!log.startsWith("EVENT_JSON:")) continue;
       const ev = JSON.parse(log.slice(11));
-      if (ev.event !== "execution_requested") continue;
+      // Our own contract emits events too; only OutLayer's request counts here.
+      if (ev.standard !== "near-outlayer" || ev.event !== "execution_requested") continue;
       const req = JSON.parse(ev.data[0].request_data);
       if (att.request_id === null || req.request_id === att.request_id) {
         found = { predecessor: req.predecessor_id, input: req.input_data ?? "", returns };

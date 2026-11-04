@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Countdown, Empty, Gauge, LoanTitle, Ring, Skeleton, StatusPill, loanMeta } from "../components/bits";
 import { BorrowingBase, PriceHistory } from "../components/Lending";
 import { EnclaveProof } from "../components/Proof";
+import { Settle } from "../components/Settle";
 import { useToast } from "../components/Toaster";
 import { useAccount } from "../lib/account";
 import { useChain, useLoad, useNow } from "../lib/chain";
@@ -103,6 +104,7 @@ function PanelCard({ round, floor }: { round: RoundT; floor: number }) {
         </dl>
       </div>
       <StateNote round={round} floor={floor} />
+      {round.status === "Closing" && <Settle kind="round" id={round.id} />}
       {round.submitted.length > 0 && (
         <div className="funds" aria-label="Funds that submitted">
           {round.submitted.map((a, i) => (
@@ -294,6 +296,7 @@ function LenderView({ round }: { round: RoundT }) {
               <div><div className="label">Funds</div><span className="serif">{round.listing?.count}</span></div>
             </div>
           </div>
+          {read?.kind === "pending" && read.purchase.status === "Pending" && <Settle kind="read" id={read.purchase.id} />}
           {read?.kind === "locked" && accountId && <LockedRead account={accountId} />}
           {read?.kind === "broken" && <p className="note bad">Your copy couldn't be opened: {read.error}</p>}
           {deciding && <Skeleton h={120} />}

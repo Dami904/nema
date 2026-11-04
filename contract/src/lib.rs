@@ -65,6 +65,10 @@ const MAX_NOTE: usize = 140;
 const STORAGE_DEPOSIT: u128 = 20_000_000_000_000_000_000_000;
 /// Enclave errors are stored on chain; longer ones are cut.
 const MAX_ERROR: usize = 200;
+/// How long an enclave call may stay unanswered before anyone can settle it as
+/// failed. OutLayer answers or times out within minutes; this is the backstop for
+/// a callback that never applied (for example one that ran out of gas).
+const STALE_AFTER_NS: u64 = 30 * 60 * 1_000_000_000;
 
 #[ext_contract(ext_outlayer)]
 #[allow(dead_code)]
@@ -92,6 +96,7 @@ enum StorageKey {
     Audits,
     PurchasesByBuyer,
     AuditsByAuditor,
+    PendingSince,
 }
 
 #[near(serializers = [borsh, json])]
@@ -318,11 +323,14 @@ pub struct Nema {
     next_audit_id: u64,
     purchases_by_buyer: LookupMap<AccountId, Vec<u64>>,
     audits_by_auditor: LookupMap<AccountId, Vec<u64>>,
+    /// When the enclave call behind a Closing round ("r{id}"), a Pending read
+    /// ("p{id}") or a Pending audit ("a{id}") went out. Cleared when it settles.
+    pending_since: LookupMap<String, u64>,
 }
 
-/// The state before applications and auditors, for `migrate`.
+/// The state before `pending_since`, for `migrate`.
 #[near(serializers = [borsh])]
-pub struct NemaV1 {
+pub struct NemaV2 {
     owner: AccountId,
     outlayer_id: AccountId,
     project_id: String,
@@ -336,6 +344,12 @@ pub struct NemaV1 {
     purchases: IterableMap<u64, Purchase>,
     next_purchase_id: u64,
     earnings: LookupMap<AccountId, u128>,
+    applications: IterableMap<AccountId, Application>,
+    auditors: LookupMap<AccountId, Appointment>,
+    audits: IterableMap<u64, AuditCopy>,
+    next_audit_id: u64,
+    purchases_by_buyer: LookupMap<AccountId, Vec<u64>>,
+    audits_by_auditor: LookupMap<AccountId, Vec<u64>>,
 }
 
 #[near]
@@ -350,7 +364,10 @@ impl Nema {
         min_contributors: u32,
         read_price: U128,
     ) -> Self {
-        require!(min_contributors >= 4, "the minimum must be at least 4 funds");
+        require!(
+            min_contributors >= 4,
+            "the minimum must be at least 4 funds"
+        );
         Self {
             owner,
             outlayer_id,
@@ -371,17 +388,17 @@ impl Nema {
             next_audit_id: 1,
             purchases_by_buyer: LookupMap::new(StorageKey::PurchasesByBuyer),
             audits_by_auditor: LookupMap::new(StorageKey::AuditsByAuditor),
+            pending_since: LookupMap::new(StorageKey::PendingSince),
         }
     }
 
-    /// Upgrade state written by the first deployment. Rounds and purchases stored
-    /// before the upgrade have a different layout, so it refuses if any exist.
+    /// Upgrade state written by the previous build, which had no `pending_since`.
+    /// Rounds, reads and audits keep their layout and carry over as they are.
     #[private]
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        let old: NemaV1 = env::state_read().unwrap_or_else(|| env::panic_str("no state to migrate"));
-        require!(old.purchases.is_empty(), "cannot migrate with purchases on record");
-        require!(old.rounds.is_empty(), "cannot migrate with rounds on record");
+        let old: NemaV2 =
+            env::state_read().unwrap_or_else(|| env::panic_str("no state to migrate"));
         Self {
             owner: old.owner,
             outlayer_id: old.outlayer_id,
@@ -396,12 +413,13 @@ impl Nema {
             purchases: old.purchases,
             next_purchase_id: old.next_purchase_id,
             earnings: old.earnings,
-            applications: IterableMap::new(StorageKey::Applications),
-            auditors: LookupMap::new(StorageKey::Auditors),
-            audits: IterableMap::new(StorageKey::Audits),
-            next_audit_id: 1,
-            purchases_by_buyer: LookupMap::new(StorageKey::PurchasesByBuyer),
-            audits_by_auditor: LookupMap::new(StorageKey::AuditsByAuditor),
+            applications: old.applications,
+            auditors: old.auditors,
+            audits: old.audits,
+            next_audit_id: old.next_audit_id,
+            purchases_by_buyer: old.purchases_by_buyer,
+            audits_by_auditor: old.audits_by_auditor,
+            pending_since: LookupMap::new(StorageKey::PendingSince),
         }
     }
 
@@ -422,10 +440,19 @@ impl Nema {
     pub fn approve(&mut self, account: AccountId) -> Promise {
         self.assert_owner();
         require!(self.members.len() < MAX_MEMBERS, "the panel is full");
-        let app = self.applications.remove(&account).unwrap_or_else(|| env::panic_str("no such application"));
+        let app = self
+            .applications
+            .remove(&account)
+            .unwrap_or_else(|| env::panic_str("no such application"));
         self.members.insert(account.clone());
         if let Some(auditor) = app.auditor {
-            self.auditors.insert(account.clone(), Appointment { auditor, since: U64(env::block_timestamp()) });
+            self.auditors.insert(
+                account.clone(),
+                Appointment {
+                    auditor,
+                    since: U64(env::block_timestamp()),
+                },
+            );
         }
         Promise::new(account).transfer(NearToken::from_yoctonear(app.bond.0))
     }
@@ -433,7 +460,10 @@ impl Nema {
     /// Turn an applicant away. Its bond is returned.
     pub fn reject(&mut self, account: AccountId) -> Promise {
         self.assert_owner();
-        let app = self.applications.remove(&account).unwrap_or_else(|| env::panic_str("no such application"));
+        let app = self
+            .applications
+            .remove(&account)
+            .unwrap_or_else(|| env::panic_str("no such application"));
         Promise::new(account).transfer(NearToken::from_yoctonear(app.bond.0))
     }
 
@@ -451,22 +481,40 @@ impl Nema {
     pub fn apply(&mut self, auditor: Option<AccountId>, note: Option<String>) {
         let who = env::predecessor_account_id();
         let bond = env::attached_deposit().as_yoctonear();
-        require!(bond >= APPLICATION_BOND, "attach the 0.05 NEAR application bond");
+        require!(
+            bond >= APPLICATION_BOND,
+            "attach the 0.05 NEAR application bond"
+        );
         require!(!self.members.contains(&who), "already a panel member");
         require!(!self.applications.contains_key(&who), "already applied");
-        require!(self.applications.len() < MAX_APPLICATIONS, "too many applications are waiting; try later");
+        require!(
+            self.applications.len() < MAX_APPLICATIONS,
+            "too many applications are waiting; try later"
+        );
         require!(auditor.as_ref() != Some(&who), "a fund cannot audit itself");
         let note = note.unwrap_or_default();
-        require!(note.len() <= MAX_NOTE, "the note must be at most 140 characters");
+        require!(
+            note.len() <= MAX_NOTE,
+            "the note must be at most 140 characters"
+        );
         self.applications.insert(
             who.clone(),
-            Application { account: who, auditor, note, applied_at: U64(env::block_timestamp()), bond: U128(bond) },
+            Application {
+                account: who,
+                auditor,
+                note,
+                applied_at: U64(env::block_timestamp()),
+                bond: U128(bond),
+            },
         );
     }
 
     pub fn withdraw_application(&mut self) -> Promise {
         let who = env::predecessor_account_id();
-        let app = self.applications.remove(&who).unwrap_or_else(|| env::panic_str("no application to withdraw"));
+        let app = self
+            .applications
+            .remove(&who)
+            .unwrap_or_else(|| env::panic_str("no application to withdraw"));
         Promise::new(who).transfer(NearToken::from_yoctonear(app.bond.0))
     }
 
@@ -480,7 +528,13 @@ impl Nema {
                 require!(a != who, "a fund cannot audit itself");
                 // Naming the same auditor again keeps its original date.
                 if self.auditors.get(&who).map(|ap| &ap.auditor) != Some(&a) {
-                    self.auditors.insert(who, Appointment { auditor: a, since: U64(env::block_timestamp()) });
+                    self.auditors.insert(
+                        who,
+                        Appointment {
+                            auditor: a,
+                            since: U64(env::block_timestamp()),
+                        },
+                    );
                 }
             }
             None => {
@@ -497,8 +551,14 @@ impl Nema {
     pub fn open_round(&mut self, loan: String, closes_at: U64) -> Promise {
         self.assert_owner();
         let attached = env::attached_deposit().as_yoctonear();
-        require!(attached >= MIN_OUTLAYER_DEPOSIT, "attach at least 0.01 NEAR for the enclave call");
-        require!(loan.len() <= 120 && !loan.is_empty(), "loan label must be 1 to 120 characters");
+        require!(
+            attached >= MIN_OUTLAYER_DEPOSIT,
+            "attach at least 0.01 NEAR for the enclave call"
+        );
+        require!(
+            loan.len() <= 120 && !loan.is_empty(),
+            "loan label must be 1 to 120 characters"
+        );
         let now = env::block_timestamp();
         require!(closes_at.0 > now, "closes_at must be in the future");
 
@@ -521,16 +581,21 @@ impl Nema {
             },
         );
 
+        emit(
+            "round_created",
+            json!({"round_id": id, "closes_at": closes_at}),
+        );
         let input = json!({
             "action": "derive_pubkey",
             "contract": env::current_account_id(),
             "round_id": id,
         });
-        self.request_enclave(input, attached, env::predecessor_account_id()).then(
-            Self::ext(env::current_account_id())
-                .with_static_gas(CALLBACK_GAS)
-                .on_round_key(id),
-        )
+        self.request_enclave(input, attached, env::predecessor_account_id())
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(CALLBACK_GAS)
+                    .on_round_key(id),
+            )
     }
 
     /// Submit (or replace) a fund's encrypted mark. The latest submission before the
@@ -546,12 +611,19 @@ impl Nema {
             .unwrap_or_else(|| env::panic_str("no such round"));
         require!(round.status == RoundStatus::Open, "the round is not open");
         require!(now < round.closes_at, "the round has closed");
-        let sub = Submission { account: who.clone(), ciphertext_hex, submitted_at: U64(now) };
+        let sub = Submission {
+            account: who.clone(),
+            ciphertext_hex,
+            submitted_at: U64(now),
+        };
         match round.submissions.iter_mut().find(|s| s.account == who) {
             Some(existing) => *existing = sub,
             None => round.submissions.push(sub),
         }
-        log!("nema: submission round={} account={}", round_id, who);
+        emit(
+            "mark_submitted",
+            json!({"round_id": round_id, "account": who}),
+        );
     }
 
     /// Anyone can close a round once its time is up. Attach at least 0.01 NEAR for the
@@ -561,7 +633,10 @@ impl Nema {
     pub fn close_round(&mut self, round_id: u64) -> PromiseOrValue<()> {
         let caller = env::predecessor_account_id();
         let attached = env::attached_deposit().as_yoctonear();
-        require!(attached >= MIN_OUTLAYER_DEPOSIT, "attach at least 0.01 NEAR for the enclave call");
+        require!(
+            attached >= MIN_OUTLAYER_DEPOSIT,
+            "attach at least 0.01 NEAR for the enclave call"
+        );
         let now = env::block_timestamp();
         let min = self.min_contributors as usize;
 
@@ -570,7 +645,10 @@ impl Nema {
             .get_mut(&round_id)
             .unwrap_or_else(|| env::panic_str("no such round"));
         require!(
-            matches!(round.status, RoundStatus::Open | RoundStatus::CloseFailed | RoundStatus::AwaitingKey),
+            matches!(
+                round.status,
+                RoundStatus::Open | RoundStatus::CloseFailed | RoundStatus::AwaitingKey
+            ),
             "the round cannot be closed in its current state"
         );
         require!(now >= round.closes_at, "the round is still open");
@@ -582,6 +660,18 @@ impl Nema {
             round.last_error = Some("the round never received its key from the enclave".into());
             return PromiseOrValue::Promise(
                 Promise::new(caller).transfer(NearToken::from_yoctonear(attached)),
+            );
+        }
+
+        // A fund removed from the panel before the round closed doesn't count: the
+        // panel is checked when the set is committed, not only when the mark arrived.
+        let members = &self.members;
+        let before = round.submissions.len();
+        round.submissions.retain(|s| members.contains(&s.account));
+        if round.submissions.len() < before {
+            emit(
+                "marks_dropped",
+                json!({"round_id": round_id, "reason": "no longer on the panel", "count": before - round.submissions.len()}),
             );
         }
 
@@ -603,6 +693,11 @@ impl Nema {
         round.closed_by = Some(caller.clone());
         round.last_error = None;
         let input = enclave_input("tally", round_id, min, round);
+        self.pending_since.insert(format!("r{round_id}"), now);
+        emit(
+            "tally_requested",
+            json!({"round_id": round_id, "set_hash": set_hash, "by": caller}),
+        );
 
         PromiseOrValue::Promise(
             self.request_enclave(input, attached, caller).then(
@@ -628,7 +723,14 @@ impl Nema {
             attached >= price + STORAGE_DEPOSIT + MIN_OUTLAYER_DEPOSIT,
             "attach the read price, the 0.02 NEAR storage deposit and at least 0.01 NEAR for the enclave call"
         );
-        self.start_read(round_id, buyer, buyer_pubkey, price, Basis::Purchased, attached - price - STORAGE_DEPOSIT)
+        self.start_read(
+            round_id,
+            buyer,
+            buyer_pubkey,
+            price,
+            Basis::Purchased,
+            attached - price - STORAGE_DEPOSIT,
+        )
     }
 
     /// A free copy of the result for a fund whose mark counted, or for an auditor
@@ -643,16 +745,35 @@ impl Nema {
             attached >= STORAGE_DEPOSIT + MIN_OUTLAYER_DEPOSIT,
             "attach the 0.02 NEAR storage deposit and at least 0.01 NEAR for the enclave call"
         );
-        let round = self.rounds.get(&round_id).unwrap_or_else(|| env::panic_str("no such round"));
-        require!(round.status == RoundStatus::Published, "the round has no published result");
-        let basis = self
-            .free_basis(round, &who)
-            .unwrap_or_else(|| env::panic_str("only funds whose marks counted, and their auditors, read for free"));
-        let claimed = self.purchase_ids_of(&who).iter().filter_map(|id| self.purchases.get(id)).any(|p| {
-            p.round_id.0 == round_id && p.basis != Basis::Purchased && p.status != PurchaseStatus::Refunded
+        let round = self
+            .rounds
+            .get(&round_id)
+            .unwrap_or_else(|| env::panic_str("no such round"));
+        require!(
+            round.status == RoundStatus::Published,
+            "the round has no published result"
+        );
+        let basis = self.free_basis(round, &who).unwrap_or_else(|| {
+            env::panic_str("only funds whose marks counted, and their auditors, read for free")
         });
+        let claimed = self
+            .purchase_ids_of(&who)
+            .iter()
+            .filter_map(|id| self.purchases.get(id))
+            .any(|p| {
+                p.round_id.0 == round_id
+                    && p.basis != Basis::Purchased
+                    && p.status != PurchaseStatus::Refunded
+            });
         require!(!claimed, "you already have a free copy of this round");
-        self.start_read(round_id, who, buyer_pubkey, 0, basis, attached - STORAGE_DEPOSIT)
+        self.start_read(
+            round_id,
+            who,
+            buyer_pubkey,
+            0,
+            basis,
+            attached - STORAGE_DEPOSIT,
+        )
     }
 
     /// The auditor a fund named asks the enclave to open that fund's submission to
@@ -660,7 +781,12 @@ impl Nema {
     /// marks, so the copy is the one that counts. Attach the 0.02 NEAR storage
     /// deposit and at least 0.01 NEAR for the enclave call.
     #[payable]
-    pub fn request_audit(&mut self, round_id: u64, fund: AccountId, auditor_pubkey: String) -> Promise {
+    pub fn request_audit(
+        &mut self,
+        round_id: u64,
+        fund: AccountId,
+        auditor_pubkey: String,
+    ) -> Promise {
         let auditor = env::predecessor_account_id();
         let attached = env::attached_deposit().as_yoctonear();
         require!(
@@ -671,8 +797,14 @@ impl Nema {
             self.auditors.get(&fund).map(|ap| &ap.auditor) == Some(&auditor),
             "only the auditor this fund named can audit it"
         );
-        require!(is_compressed_pubkey(&auditor_pubkey), "auditor_pubkey must be a compressed secp256k1 key in hex");
-        let round = self.rounds.get(&round_id).unwrap_or_else(|| env::panic_str("no such round"));
+        require!(
+            is_compressed_pubkey(&auditor_pubkey),
+            "auditor_pubkey must be a compressed secp256k1 key in hex"
+        );
+        let round = self
+            .rounds
+            .get(&round_id)
+            .unwrap_or_else(|| env::panic_str("no such round"));
         require!(
             !matches!(round.status, RoundStatus::AwaitingKey | RoundStatus::Open),
             "the round is still taking marks"
@@ -707,12 +839,22 @@ impl Nema {
                 error: None,
             },
         );
-        self.audits_by_auditor.entry(auditor.clone()).or_default().push(id);
-        self.request_enclave(input, attached - STORAGE_DEPOSIT, auditor).then(
-            Self::ext(env::current_account_id())
-                .with_static_gas(CALLBACK_GAS)
-                .on_audit(id),
-        )
+        self.audits_by_auditor
+            .entry(auditor.clone())
+            .or_default()
+            .push(id);
+        self.pending_since
+            .insert(format!("a{id}"), env::block_timestamp());
+        emit(
+            "audit_requested",
+            json!({"audit_id": id, "round_id": round_id, "auditor": auditor}),
+        );
+        self.request_enclave(input, attached - STORAGE_DEPOSIT, auditor)
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(CALLBACK_GAS)
+                    .on_audit(id),
+            )
     }
 
     /// Pay out the caller's share of read fees. If the transfer fails, the
@@ -721,11 +863,13 @@ impl Nema {
         let who = env::predecessor_account_id();
         let amount = self.earnings.remove(&who).unwrap_or(0);
         require!(amount > 0, "nothing to withdraw");
-        Promise::new(who.clone()).transfer(NearToken::from_yoctonear(amount)).then(
-            Self::ext(env::current_account_id())
-                .with_static_gas(CALLBACK_GAS)
-                .on_withdrawn(who, U128(amount)),
-        )
+        Promise::new(who.clone())
+            .transfer(NearToken::from_yoctonear(amount))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(CALLBACK_GAS)
+                    .on_withdrawn(who, U128(amount)),
+            )
     }
 
     #[private]
@@ -737,8 +881,85 @@ impl Nema {
     ) {
         if result.is_err() {
             *self.earnings.entry(account.clone()).or_insert(0) += amount.0;
-            log!("nema: withdrawal to {} failed; earnings restored", account);
+            emit(
+                "withdrawal_failed",
+                json!({"account": account, "amount": amount}),
+            );
         }
+    }
+
+    // ---- settling calls the enclave never answered ----
+
+    /// A round stuck in Closing for over 30 minutes (its tally never applied) goes
+    /// back to CloseFailed, so anyone can close it again. Anyone may call this.
+    pub fn reconcile_round(&mut self, round_id: u64) {
+        let key = format!("r{round_id}");
+        let since = self.stale_since(&key);
+        let round = self
+            .rounds
+            .get_mut(&round_id)
+            .unwrap_or_else(|| env::panic_str("no such round"));
+        require!(
+            round.status == RoundStatus::Closing,
+            "the round is not waiting on the enclave"
+        );
+        round.status = RoundStatus::CloseFailed;
+        round.last_error = Some("the enclave never answered; close the round again".into());
+        self.pending_since.remove(&key);
+        emit(
+            "round_reconciled",
+            json!({"round_id": round_id, "pending_since": U64(since)}),
+        );
+    }
+
+    /// A read stuck in Pending for over 30 minutes is refunded to its buyer. A
+    /// delivery that turns up later is ignored. Anyone may call this.
+    pub fn reconcile_read(&mut self, purchase_id: u64) -> PromiseOrValue<()> {
+        let key = format!("p{purchase_id}");
+        let since = self.stale_since(&key);
+        let p = self
+            .purchases
+            .get_mut(&purchase_id)
+            .unwrap_or_else(|| env::panic_str("no such read"));
+        require!(
+            p.status == PurchaseStatus::Pending,
+            "the read is not waiting on the enclave"
+        );
+        p.status = PurchaseStatus::Refunded;
+        p.error = Some("the enclave never answered; the read price was refunded".into());
+        let (buyer, price) = (p.buyer.clone(), p.price.0);
+        self.pending_since.remove(&key);
+        emit(
+            "read_reconciled",
+            json!({"purchase_id": purchase_id, "pending_since": U64(since), "refund": U128(price)}),
+        );
+        if price > 0 {
+            PromiseOrValue::Promise(Promise::new(buyer).transfer(NearToken::from_yoctonear(price)))
+        } else {
+            PromiseOrValue::Value(())
+        }
+    }
+
+    /// An audit stuck in Pending for over 30 minutes is marked failed, so the
+    /// auditor can ask again. Anyone may call this.
+    pub fn reconcile_audit(&mut self, audit_id: u64) {
+        let key = format!("a{audit_id}");
+        let since = self.stale_since(&key);
+        let audit = self
+            .audits
+            .get_mut(&audit_id)
+            .unwrap_or_else(|| env::panic_str("no such audit"));
+        require!(
+            audit.status == AuditStatus::Pending,
+            "the audit is not waiting on the enclave"
+        );
+        audit.status = AuditStatus::Failed;
+        audit.error = Some("the enclave never answered; ask again".into());
+        self.pending_since.remove(&key);
+        emit(
+            "audit_reconciled",
+            json!({"audit_id": audit_id, "pending_since": U64(since)}),
+        );
     }
 
     // ---- enclave callbacks (never panic: a panic would revert the state change and
@@ -782,6 +1003,21 @@ impl Nema {
 
     // ---- views ----
 
+    /// When the enclave call behind a Closing round, a Pending read or a Pending
+    /// audit went out (`kind` is "round", "read" or "audit"); null once it settled.
+    /// Anyone can settle it with `reconcile_*` 30 minutes after this.
+    pub fn get_pending_since(&self, kind: String, id: U64) -> Option<U64> {
+        let prefix = match kind.as_str() {
+            "round" => "r",
+            "read" => "p",
+            "audit" => "a",
+            _ => env::panic_str("kind must be round, read or audit"),
+        };
+        self.pending_since
+            .get(&format!("{prefix}{}", id.0))
+            .map(|t| U64(*t))
+    }
+
     pub fn get_round(&self, round_id: U64) -> Option<RoundView> {
         self.rounds.get(&round_id.0).map(view_of)
     }
@@ -797,7 +1033,10 @@ impl Nema {
 
     /// The submissions exactly as stored (ciphertexts), for recomputing the set hash.
     pub fn get_submissions(&self, round_id: U64) -> Vec<Submission> {
-        self.rounds.get(&round_id.0).map(|r| r.submissions.clone()).unwrap_or_default()
+        self.rounds
+            .get(&round_id.0)
+            .map(|r| r.submissions.clone())
+            .unwrap_or_default()
     }
 
     pub fn get_purchase(&self, purchase_id: U64) -> Option<Purchase> {
@@ -805,7 +1044,11 @@ impl Nema {
     }
 
     pub fn get_purchases_of(&self, buyer: AccountId) -> Vec<Purchase> {
-        self.purchase_ids_of(&buyer).iter().filter_map(|id| self.purchases.get(id)).cloned().collect()
+        self.purchase_ids_of(&buyer)
+            .iter()
+            .filter_map(|id| self.purchases.get(id))
+            .cloned()
+            .collect()
     }
 
     pub fn get_earnings(&self, account: AccountId) -> U128 {
@@ -838,8 +1081,15 @@ impl Nema {
     }
 
     pub fn get_audits_of(&self, auditor: AccountId) -> Vec<AuditCopy> {
-        let ids = self.audits_by_auditor.get(&auditor).cloned().unwrap_or_default();
-        ids.iter().filter_map(|id| self.audits.get(id)).cloned().collect()
+        let ids = self
+            .audits_by_auditor
+            .get(&auditor)
+            .cloned()
+            .unwrap_or_default();
+        ids.iter()
+            .filter_map(|id| self.audits.get(id))
+            .cloned()
+            .collect()
     }
 
     /// Why `account` may read a published round for free, if it may.
@@ -867,24 +1117,50 @@ impl Nema {
 
 impl Nema {
     fn assert_owner(&self) {
-        require!(env::predecessor_account_id() == self.owner, "only the owner can do this");
+        require!(
+            env::predecessor_account_id() == self.owner,
+            "only the owner can do this"
+        );
     }
 
     fn purchase_ids_of(&self, buyer: &AccountId) -> Vec<u64> {
-        self.purchases_by_buyer.get(buyer).cloned().unwrap_or_default()
+        self.purchases_by_buyer
+            .get(buyer)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// A fund whose mark counted reads free; so does an auditor a counted fund
     /// named no later than the round's deadline.
     fn free_basis(&self, round: &Round, who: &AccountId) -> Option<Basis> {
-        let contributors = round.listing.as_ref().map(|l| l.contributors.as_slice()).unwrap_or_default();
+        let contributors = round
+            .listing
+            .as_ref()
+            .map(|l| l.contributors.as_slice())
+            .unwrap_or_default();
         if contributors.contains(who) {
             return Some(Basis::Contributed);
         }
         let audits = contributors.iter().any(|c| {
-            self.auditors.get(c).is_some_and(|ap| &ap.auditor == who && ap.since.0 <= round.closes_at)
+            self.auditors
+                .get(c)
+                .is_some_and(|ap| &ap.auditor == who && ap.since.0 <= round.closes_at)
         });
         audits.then_some(Basis::Audit)
+    }
+
+    /// When the call behind `key` went out, if it is old enough to settle. Fails
+    /// closed: no record (or too recent) means it can't be settled yet.
+    fn stale_since(&self, key: &str) -> u64 {
+        let since = *self
+            .pending_since
+            .get(key)
+            .unwrap_or_else(|| env::panic_str("nothing is waiting on the enclave here"));
+        require!(
+            env::block_timestamp() >= since.saturating_add(STALE_AFTER_NS),
+            "the enclave may still answer; try again 30 minutes after the request"
+        );
+        since
     }
 
     fn request_enclave(&self, input: Value, deposit: u128, payer: AccountId) -> Promise {
@@ -920,11 +1196,39 @@ impl Nema {
         basis: Basis,
         enclave_deposit: u128,
     ) -> Promise {
-        require!(is_compressed_pubkey(&buyer_pubkey), "buyer_pubkey must be a compressed secp256k1 key in hex");
+        require!(
+            is_compressed_pubkey(&buyer_pubkey),
+            "buyer_pubkey must be a compressed secp256k1 key in hex"
+        );
         let min = self.min_contributors as usize;
-        let round = self.rounds.get(&round_id).unwrap_or_else(|| env::panic_str("no such round"));
-        require!(round.status == RoundStatus::Published, "the round has no published result");
-        let listing = round.listing.as_ref().expect("a published round has a listing");
+        let round = self
+            .rounds
+            .get(&round_id)
+            .unwrap_or_else(|| env::panic_str("no such round"));
+        require!(
+            round.status == RoundStatus::Published,
+            "the round has no published result"
+        );
+        let listing = round
+            .listing
+            .as_ref()
+            .expect("a published round has a listing");
+        // The reading key is made and saved in the browser before the wallet signs, so
+        // it doubles as the idempotency key: a retry after a wallet timeout finds the
+        // first read instead of paying twice.
+        let duplicate = self
+            .purchase_ids_of(&buyer)
+            .iter()
+            .filter_map(|id| self.purchases.get(id))
+            .any(|p| {
+                p.round_id.0 == round_id
+                    && p.buyer_pubkey == buyer_pubkey
+                    && p.status != PurchaseStatus::Refunded
+            });
+        require!(
+            !duplicate,
+            "this key already has a copy of this round, delivered or on its way"
+        );
 
         let mut input = enclave_input("deliver", round_id, min, round);
         input["commitment"] = json!(listing.commitment);
@@ -946,7 +1250,16 @@ impl Nema {
                 error: None,
             },
         );
-        self.purchases_by_buyer.entry(buyer.clone()).or_default().push(id);
+        self.purchases_by_buyer
+            .entry(buyer.clone())
+            .or_default()
+            .push(id);
+        self.pending_since
+            .insert(format!("p{id}"), env::block_timestamp());
+        emit(
+            "read_requested",
+            json!({"purchase_id": id, "round_id": round_id, "buyer": buyer, "basis": basis}),
+        );
 
         self.request_enclave(input, enclave_deposit, buyer).then(
             Self::ext(env::current_account_id())
@@ -956,50 +1269,96 @@ impl Nema {
     }
 
     fn apply_audit(&mut self, audit_id: u64, result: Result<Value, String>) {
-        let Some(audit) = self.audits.get_mut(&audit_id) else { return };
-        if audit.status != AuditStatus::Pending {
-            log!("nema: ignoring audit {} in state {:?}", audit_id, audit.status);
+        let Some(current) = self.audits.get(&audit_id) else {
+            return;
+        };
+        if current.status != AuditStatus::Pending {
+            emit(
+                "callback_ignored",
+                json!({"kind": "audit", "id": audit_id, "status": current.status}),
+            );
             return;
         }
+        // The fund may have cleared or changed its auditor while the enclave ran; the
+        // copy goes only to the auditor the fund names when it lands.
+        let still_named = self
+            .auditors
+            .get(&current.fund)
+            .is_some_and(|ap| ap.auditor == current.auditor);
+        self.pending_since.remove(&format!("a{audit_id}"));
+        let audit = self.audits.get_mut(&audit_id).expect("checked above");
+        let result = if still_named {
+            result
+        } else {
+            Err("the fund changed its auditor while the audit ran".into())
+        };
         let checked = result
-            .and_then(|v| serde_json::from_value::<AuditOut>(v).map_err(|e| format!("bad audit response: {e}")))
+            .and_then(|v| {
+                serde_json::from_value::<AuditOut>(v)
+                    .map_err(|e| format!("bad audit response: {e}"))
+            })
             .and_then(|out| {
                 if !out.ok {
-                    return Err(out.error.unwrap_or_else(|| "the enclave declined to open the submission".into()));
+                    return Err(out
+                        .error
+                        .unwrap_or_else(|| "the enclave declined to open the submission".into()));
                 }
                 let sealed = out.sealed.ok_or("missing sealed submission")?;
-                if is_sealed_hex(&sealed) { Ok(sealed) } else { Err("malformed sealed submission".into()) }
+                if is_sealed_hex(&sealed) {
+                    Ok(sealed)
+                } else {
+                    Err("malformed sealed submission".into())
+                }
             });
         match checked {
             Ok(sealed) => {
                 audit.sealed = Some(sealed);
                 audit.status = AuditStatus::Delivered;
+                emit("audit_delivered", json!({"audit_id": audit_id}));
             }
             Err(reason) => {
                 audit.status = AuditStatus::Failed;
                 audit.error = Some(clip(reason));
+                emit(
+                    "audit_failed",
+                    json!({"audit_id": audit_id, "error": audit.error}),
+                );
             }
         }
     }
 
     fn apply_round_key(&mut self, round_id: u64, result: Result<Value, String>) {
-        let Some(round) = self.rounds.get_mut(&round_id) else { return };
+        let Some(round) = self.rounds.get_mut(&round_id) else {
+            return;
+        };
         if round.status != RoundStatus::AwaitingKey {
-            log!("nema: ignoring key for round {} in state {:?}", round_id, round.status);
+            emit(
+                "callback_ignored",
+                json!({"kind": "round_key", "id": round_id, "status": round.status}),
+            );
             return;
         }
         let parsed = result.and_then(|v| {
             serde_json::from_value::<KeyOut>(v).map_err(|e| format!("bad key response: {e}"))
         });
         match parsed {
-            Ok(KeyOut { ok: Some(false), error, .. }) => {
+            Ok(KeyOut {
+                ok: Some(false),
+                error,
+                ..
+            }) => {
                 round.status = RoundStatus::Failed;
-                round.last_error = Some(clip(error.unwrap_or_else(|| "the enclave declined to derive a key".into())));
+                round.last_error =
+                    Some(clip(error.unwrap_or_else(|| {
+                        "the enclave declined to derive a key".into()
+                    })));
             }
-            Ok(KeyOut { pubkey: Some(pk), .. }) if is_compressed_pubkey(&pk) => {
+            Ok(KeyOut {
+                pubkey: Some(pk), ..
+            }) if is_compressed_pubkey(&pk) => {
                 round.pubkey = Some(pk);
                 round.status = RoundStatus::Open;
-                log!("nema: round {} open", round_id);
+                emit("round_opened", json!({"round_id": round_id}));
             }
             Ok(_) => {
                 round.status = RoundStatus::Failed;
@@ -1014,33 +1373,54 @@ impl Nema {
 
     fn apply_tally(&mut self, round_id: u64, result: Result<Value, String>) {
         let min = self.min_contributors;
-        let Some(round) = self.rounds.get_mut(&round_id) else { return };
+        let Some(round) = self.rounds.get_mut(&round_id) else {
+            return;
+        };
         if round.status != RoundStatus::Closing {
-            log!("nema: ignoring tally for round {} in state {:?}", round_id, round.status);
+            emit(
+                "callback_ignored",
+                json!({"kind": "tally", "id": round_id, "status": round.status}),
+            );
             return;
         }
+        self.pending_since.remove(&format!("r{round_id}"));
         match validate_tally(round, min, result) {
             Ok(listing) => {
                 round.listing = Some(listing);
                 round.status = RoundStatus::Published;
                 round.last_error = None;
-                log!("nema: round {} published", round_id);
+                emit(
+                    "round_published",
+                    json!({"round_id": round_id, "count": round.listing.as_ref().map(|l| l.count)}),
+                );
             }
             Err(reason) => {
                 round.status = RoundStatus::CloseFailed;
                 round.last_error = Some(clip(reason));
-                log!("nema: round {} close failed, can be retried", round_id);
+                emit(
+                    "close_failed",
+                    json!({"round_id": round_id, "error": round.last_error}),
+                );
             }
         }
     }
 
     fn apply_delivery(&mut self, purchase_id: u64, result: Result<Value, String>) {
-        let Some(purchase) = self.purchases.get(&purchase_id).cloned() else { return };
+        let Some(purchase) = self.purchases.get(&purchase_id).cloned() else {
+            return;
+        };
         if purchase.status != PurchaseStatus::Pending {
-            log!("nema: ignoring delivery for purchase {} in state {:?}", purchase_id, purchase.status);
+            emit(
+                "callback_ignored",
+                json!({"kind": "read", "id": purchase_id, "status": purchase.status}),
+            );
             return;
         }
-        let listing = self.rounds.get(&purchase.round_id.0).and_then(|r| r.listing.clone());
+        self.pending_since.remove(&format!("p{purchase_id}"));
+        let listing = self
+            .rounds
+            .get(&purchase.round_id.0)
+            .and_then(|r| r.listing.clone());
         let checked = match listing {
             Some(l) => validate_delivery(&l, result).map(|sealed| (sealed, l.contributors)),
             None => Err("the round has no listing".into()),
@@ -1051,15 +1431,22 @@ impl Nema {
                 p.sealed = Some(sealed);
                 p.status = PurchaseStatus::Delivered;
                 self.credit_contributors(&contributors, purchase.price.0);
-                log!("nema: purchase {} delivered", purchase_id);
+                emit(
+                    "read_delivered",
+                    json!({"purchase_id": purchase_id, "price": U128(purchase.price.0)}),
+                );
             }
             Err(reason) => {
                 p.status = PurchaseStatus::Refunded;
                 p.error = Some(clip(reason));
                 if purchase.price.0 > 0 {
-                    Promise::new(purchase.buyer.clone()).transfer(NearToken::from_yoctonear(purchase.price.0));
+                    Promise::new(purchase.buyer.clone())
+                        .transfer(NearToken::from_yoctonear(purchase.price.0));
                 }
-                log!("nema: purchase {} refunded", purchase_id);
+                emit(
+                    "read_refunded",
+                    json!({"purchase_id": purchase_id, "error": p.error}),
+                );
             }
         }
     }
@@ -1080,6 +1467,14 @@ impl Nema {
     }
 }
 
+/// A NEP-297 event, so indexers and the site can follow every state change.
+fn emit(event: &str, data: Value) {
+    log!(
+        "EVENT_JSON:{}",
+        json!({"standard": "nema", "version": "1.0.0", "event": event, "data": [data]})
+    );
+}
+
 /// The input shared by `tally` and `deliver`: the committed set, sorted by account.
 fn enclave_input(action: &str, round_id: u64, min: usize, round: &Round) -> Value {
     let mut sorted = round.submissions.clone();
@@ -1098,10 +1493,17 @@ fn enclave_input(action: &str, round_id: u64, min: usize, round: &Round) -> Valu
 }
 
 /// Check the enclave's tally against what this contract knows before trusting it.
-fn validate_tally(round: &Round, min: u32, result: Result<Value, String>) -> Result<Listing, String> {
-    let out: TallyOut = serde_json::from_value(result?).map_err(|e| format!("bad tally response: {e}"))?;
+fn validate_tally(
+    round: &Round,
+    min: u32,
+    result: Result<Value, String>,
+) -> Result<Listing, String> {
+    let out: TallyOut =
+        serde_json::from_value(result?).map_err(|e| format!("bad tally response: {e}"))?;
     if !out.ok {
-        return Err(out.error.unwrap_or_else(|| "the enclave declined to publish".into()));
+        return Err(out
+            .error
+            .unwrap_or_else(|| "the enclave declined to publish".into()));
     }
     let count = out.count.ok_or("missing count")?;
     let echoed = out.set_hash.ok_or("missing set_hash")?;
@@ -1115,11 +1517,18 @@ fn validate_tally(round: &Round, min: u32, result: Result<Value, String>) -> Res
         return Err("malformed commitment".into());
     }
     // Every submission is either counted or rejected, exactly once.
-    let submitters: HashSet<&str> = round.submissions.iter().map(|s| s.account.as_str()).collect();
+    let submitters: HashSet<&str> = round
+        .submissions
+        .iter()
+        .map(|s| s.account.as_str())
+        .collect();
     let mut dropped = HashSet::new();
     for r in &rejected {
         if !submitters.contains(r.account.as_str()) || !dropped.insert(r.account.as_str()) {
-            return Err(format!("the enclave rejected an unknown or repeated account {}", r.account));
+            return Err(format!(
+                "the enclave rejected an unknown or repeated account {}",
+                r.account
+            ));
         }
     }
     if count < min || count as usize + rejected.len() != round.submissions.len() {
@@ -1131,14 +1540,23 @@ fn validate_tally(round: &Round, min: u32, result: Result<Value, String>) -> Res
         .filter(|s| !dropped.contains(s.account.as_str()))
         .map(|s| s.account.clone())
         .collect();
-    Ok(Listing { count, rejected, set_hash: echoed, commitment, contributors })
+    Ok(Listing {
+        count,
+        rejected,
+        set_hash: echoed,
+        commitment,
+        contributors,
+    })
 }
 
 /// Check a delivery is for this round's committed set and result.
 fn validate_delivery(listing: &Listing, result: Result<Value, String>) -> Result<String, String> {
-    let out: DeliverOut = serde_json::from_value(result?).map_err(|e| format!("bad delivery response: {e}"))?;
+    let out: DeliverOut =
+        serde_json::from_value(result?).map_err(|e| format!("bad delivery response: {e}"))?;
     if !out.ok {
-        return Err(out.error.unwrap_or_else(|| "the enclave declined to deliver".into()));
+        return Err(out
+            .error
+            .unwrap_or_else(|| "the enclave declined to deliver".into()));
     }
     if out.set_hash.as_deref() != Some(listing.set_hash.as_str()) {
         return Err("the enclave delivered for a different submission set".into());
@@ -1213,18 +1631,23 @@ pub fn compute_set_hash(subs: &[Submission]) -> String {
 
 fn validate_ciphertext_hex(s: &str) {
     require!(
-        s.len() >= MIN_CIPHERTEXT_HEX && s.len() <= MAX_CIPHERTEXT_HEX && s.len() % 2 == 0,
+        s.len() >= MIN_CIPHERTEXT_HEX && s.len() <= MAX_CIPHERTEXT_HEX && s.len().is_multiple_of(2),
         "ciphertext must be even-length hex of 64 to 2048 characters"
     );
-    require!(s.chars().all(|c| c.is_ascii_hexdigit()), "ciphertext must be hex");
+    require!(
+        s.chars().all(|c| c.is_ascii_hexdigit()),
+        "ciphertext must be hex"
+    );
 }
 
 fn is_compressed_pubkey(s: &str) -> bool {
-    s.len() == 66 && (s.starts_with("02") || s.starts_with("03")) && s.chars().all(|c| c.is_ascii_hexdigit())
+    s.len() == 66
+        && (s.starts_with("02") || s.starts_with("03"))
+        && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn is_hex_of_len(s: &str, len: usize) -> bool {
-    s.len() == len && len % 2 == 0 && s.chars().all(|c| c.is_ascii_hexdigit())
+    s.len() == len && len.is_multiple_of(2) && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 #[cfg(test)]

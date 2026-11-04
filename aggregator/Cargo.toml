@@ -15,3 +15,8 @@ sha2 = "0.11.1"
 name = "nema-aggregator"
 path = "src/main.rs"
 
+
+# The enclave source is frozen: its build hash is pinned in OutLayer and the
+# secret lock, so lint findings that would need a source edit are allowed here.
+[lints.clippy]
+manual_div_ceil = "allow"

@@ -21,3 +21,8 @@ lto = true
 debug = false
 panic = "abort"
 overflow-checks = true
+
+[lints.clippy]
+# `new` takes the deployment settings one by one; #[near] wraps it in generated
+# code an inline allow does not reach.
+too_many_arguments = "allow"

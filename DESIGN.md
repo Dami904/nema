@@ -7,7 +7,7 @@ Working notes, not marketing. Updated as decisions are made.
 | Part | Where | State |
 | --- | --- | --- |
 | Enclave module (derive key, tally, sealed delivery, audit) | `aggregator/` | Done, 32 tests, builds to wasm32-wasip2 (461 KB, sha256 `3ed58517…50d6`), active on OutLayer from the `enclave-v2` release |
-| NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done, 82 unit tests. Live on testnet (sha256 `1820d211…bfa2`), migrated from the first build |
+| NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done, 97 unit tests. Live on testnet (sha256 `4056da77…3413`), migrated in place from each earlier build |
 | Browser crypto check (eciesjs 0.5.0) | `interop/` | Done: both directions verified against the enclave code |
 | Web UI (encrypt in browser, submit, buy or claim, open the sealed copy, audit) | `web/` | Done, sample data for every state; no live call sent yet |
 
@@ -144,19 +144,15 @@ ECIES: secp256k1, uncompressed ephemeral key, HKDF-SHA256, AES-256-GCM with a
 
 ## What is not verified
 
-- Nothing has run on chain or on OutLayer. The calls to `outlayer.testnet`
-  follow OutLayer's example contract but are only unit-tested with mocks.
-- That OutLayer sets `NEAR_PREDECESSOR_ID` to the calling contract. The docs say
-  it does; the first real run must confirm it, because the caller check rests on it.
-- That the wasm build runs: it has not been executed (no local WASM runtime).
-  Sealed delivery needs randomness from WASI inside the enclave.
+Round 2 ran in full on testnet (see the README), so the OutLayer calls, the
+caller check, sealed delivery and the attestation checks have all run for real.
+What OutLayer actually did is in [docs/API_NOTES.md](docs/API_NOTES.md). Still
+open:
+
 - OutLayer's input size limit for a round with many submissions.
-- The contract's wasm (`contract/build.sh`, Rust 1.96, 312 KB) has been deployed
-  to testnet uninitialized and NEAR ran it: a view call reached the contract's
-  own "not initialized" check (tx FAD4hwmoA38RwidrrbxnXpBWJZXKZHivsGfDkTzyBTpf).
-  None of its methods has run on chain yet; the unit tests run natively.
-- The master secret has not been created.
-- OutLayer's attestation has not been inspected for a real run.
+- The 30-minute settle path (`reconcile_*`) has only run in unit tests: no
+  enclave call has yet failed to answer on testnet.
+- Everything else not done is in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Trust model
 

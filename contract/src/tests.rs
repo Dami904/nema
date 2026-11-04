@@ -186,7 +186,12 @@ fn a_round_that_never_got_its_key_can_be_ended_after_its_deadline() {
     let _ = c.open_round("Loan A".into(), U64(1000 * NS));
     close(&mut c);
     assert_eq!(status(&c), RoundStatus::Failed);
-    assert!(c.get_round(U64(1)).unwrap().last_error.unwrap().contains("never received its key"));
+    assert!(c
+        .get_round(U64(1))
+        .unwrap()
+        .last_error
+        .unwrap()
+        .contains("never received its key"));
 }
 
 #[test]
@@ -213,7 +218,10 @@ fn the_enclave_refusing_a_key_is_recorded() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
     let _ = c.open_round("Loan A".into(), U64(1000 * NS));
-    c.apply_round_key(1, Ok(json!({ "ok": false, "error": "only the round's contract may call this module" })));
+    c.apply_round_key(
+        1,
+        Ok(json!({ "ok": false, "error": "only the round's contract may call this module" })),
+    );
     let r = c.get_round(U64(1)).unwrap();
     assert_eq!(r.status, RoundStatus::Failed);
     assert!(r.last_error.unwrap().contains("only the round's contract"));
@@ -314,8 +322,14 @@ fn set_hash_matches_the_enclaves_fixed_vector() {
         ciphertext_hex: ct,
         submitted_at: U64(1),
     };
-    let subs = [mk("alice.testnet", "ab".repeat(40)), mk("bob.testnet", "cd".repeat(40))];
-    assert_eq!(compute_set_hash(&subs), include_str!("../../testdata/set_hash_vector.txt"));
+    let subs = [
+        mk("alice.testnet", "ab".repeat(40)),
+        mk("bob.testnet", "cd".repeat(40)),
+    ];
+    assert_eq!(
+        compute_set_hash(&subs),
+        include_str!("../../testdata/set_hash_vector.txt")
+    );
 }
 
 // ---- closing ----
@@ -382,10 +396,13 @@ fn rejected_funds_are_not_contributors() {
     close(&mut c);
     let h = set_hash(&c);
     let e = accounts(5).to_string();
-    c.apply_tally(1, Ok(json!({
-        "ok": true, "count": 4, "set_hash": h, "commitment": commitment(),
-        "rejected": [{"account": e, "reason": "out of range"}],
-    })));
+    c.apply_tally(
+        1,
+        Ok(json!({
+            "ok": true, "count": 4, "set_hash": h, "commitment": commitment(),
+            "rejected": [{"account": e, "reason": "out of range"}],
+        })),
+    );
     let listing = c.get_round(U64(1)).unwrap().listing.unwrap();
     assert_eq!(listing.contributors, funds()[..4].to_vec());
 }
@@ -424,8 +441,10 @@ fn a_tally_of_a_different_set_is_refused_and_the_close_can_be_retried() {
 
 #[test]
 fn a_count_below_the_minimum_is_not_published() {
-    let rejected: Vec<Value> =
-        funds()[3..].iter().map(|f| json!({"account": f, "reason": "cannot decrypt"})).collect();
+    let rejected: Vec<Value> = funds()[3..]
+        .iter()
+        .map(|f| json!({"account": f, "reason": "cannot decrypt"}))
+        .collect();
     tally_is_refused(
         json!({"ok": true, "count": 3, "rejected": rejected, "set_hash": "COMMITTED", "commitment": commitment()}),
         "implausible contributor count",
@@ -465,7 +484,10 @@ fn rejecting_an_account_twice_is_not_published() {
 
 #[test]
 fn a_missing_or_malformed_commitment_is_not_published() {
-    tally_is_refused(json!({"ok": true, "count": 5, "rejected": [], "set_hash": "COMMITTED"}), "missing commitment");
+    tally_is_refused(
+        json!({"ok": true, "count": 5, "rejected": [], "set_hash": "COMMITTED"}),
+        "missing commitment",
+    );
     tally_is_refused(
         json!({"ok": true, "count": 5, "rejected": [], "set_hash": "COMMITTED", "commitment": "zz"}),
         "malformed commitment",
@@ -474,7 +496,10 @@ fn a_missing_or_malformed_commitment_is_not_published() {
 
 #[test]
 fn the_enclave_declining_is_recorded_not_panicked() {
-    tally_is_refused(json!({"ok": false, "error": "only 3 valid submissions, 4 required"}), "only 3 valid");
+    tally_is_refused(
+        json!({"ok": false, "error": "only 3 valid submissions, 4 required"}),
+        "only 3 valid",
+    );
 }
 
 #[test]
@@ -571,10 +596,13 @@ fn a_rejected_fund_earns_nothing() {
     close(&mut c);
     let h = set_hash(&c);
     let e = accounts(5);
-    c.apply_tally(1, Ok(json!({
-        "ok": true, "count": 4, "set_hash": h, "commitment": commitment(),
-        "rejected": [{"account": e.to_string(), "reason": "out of range"}],
-    })));
+    c.apply_tally(
+        1,
+        Ok(json!({
+            "ok": true, "count": 4, "set_hash": h, "commitment": commitment(),
+            "rejected": [{"account": e.to_string(), "reason": "out of range"}],
+        })),
+    );
     let id = buy(&mut c);
     c.apply_delivery(id, Ok(good_delivery(&h)));
     assert_eq!(c.get_earnings(e).0, 0);
@@ -611,7 +639,10 @@ fn a_delivery_for_another_commitment_is_refunded() {
 
 #[test]
 fn a_delivery_for_another_set_is_refunded() {
-    delivery_is_refunded(Ok(good_delivery(&"00".repeat(32))), "different submission set");
+    delivery_is_refunded(
+        Ok(good_delivery(&"00".repeat(32))),
+        "different submission set",
+    );
 }
 
 /// The set hash depends only on the submissions, which every test makes the same way.
@@ -638,12 +669,18 @@ fn an_oversized_sealed_copy_is_refunded() {
 
 #[test]
 fn a_failed_enclave_call_on_delivery_is_refunded() {
-    delivery_is_refunded(Err("the enclave call failed".into()), "the enclave call failed");
+    delivery_is_refunded(
+        Err("the enclave call failed".into()),
+        "the enclave call failed",
+    );
 }
 
 #[test]
 fn the_enclave_declining_a_delivery_is_refunded() {
-    delivery_is_refunded(Ok(json!({"ok": false, "error": "invalid buyer key"})), "invalid buyer key");
+    delivery_is_refunded(
+        Ok(json!({"ok": false, "error": "invalid buyer key"})),
+        "invalid buyer key",
+    );
 }
 
 #[test]
@@ -720,7 +757,10 @@ fn a_contributing_fund_reads_for_free_and_nobody_is_paid() {
     testing_env!(ctx(&f, READ, 1100));
     let _ = c.claim_read(1, pubkey());
     let p = c.get_purchases_of(f.clone()).pop().unwrap();
-    assert_eq!((p.basis, p.price.0, p.status), (Basis::Contributed, 0, PurchaseStatus::Pending));
+    assert_eq!(
+        (p.basis, p.price.0, p.status),
+        (Basis::Contributed, 0, PurchaseStatus::Pending)
+    );
     let h = set_hash(&c);
     c.apply_delivery(p.id.0, Ok(good_delivery(&h)));
     assert_eq!(purchase(&c, p.id.0).status, PurchaseStatus::Delivered);
@@ -758,10 +798,13 @@ fn a_fund_whose_mark_was_dropped_cannot_claim_a_free_copy() {
     close(&mut c);
     let h = set_hash(&c);
     let dropped = funds()[4].to_string();
-    c.apply_tally(1, Ok(json!({
-        "ok": true, "count": 4, "rejected": [{"account": dropped, "reason": "out of range"}],
-        "set_hash": h, "commitment": commitment(),
-    })));
+    c.apply_tally(
+        1,
+        Ok(json!({
+            "ok": true, "count": 4, "rejected": [{"account": dropped, "reason": "out of range"}],
+            "set_hash": h, "commitment": commitment(),
+        })),
+    );
     testing_env!(ctx(&funds()[4], READ, 1100));
     let _ = c.claim_read(1, pubkey());
 }
@@ -891,10 +934,16 @@ fn the_named_auditor_gets_the_funds_own_submission_sealed() {
     testing_env!(ctx(&auditor(), READ, 1100));
     let _ = c.request_audit(1, f.clone(), pubkey());
     let a = c.get_audits_of(auditor()).pop().unwrap();
-    assert_eq!((a.fund, a.status, a.submitted_at.0), (f, AuditStatus::Pending, 200 * NS));
+    assert_eq!(
+        (a.fund, a.status, a.submitted_at.0),
+        (f, AuditStatus::Pending, 200 * NS)
+    );
     c.apply_audit(a.id.0, Ok(json!({"ok": true, "sealed": sealed()})));
     let a = c.get_audits_of(auditor()).pop().unwrap();
-    assert_eq!((a.status, a.sealed), (AuditStatus::Delivered, Some(sealed())));
+    assert_eq!(
+        (a.status, a.sealed),
+        (AuditStatus::Delivered, Some(sealed()))
+    );
 }
 
 #[test]
@@ -906,12 +955,19 @@ fn a_failed_audit_is_recorded_not_panicked() {
     close(&mut c);
     testing_env!(ctx(&auditor(), READ, 1100));
     let _ = c.request_audit(1, f, pubkey());
-    c.apply_audit(1, Ok(json!({"ok": false, "error": "encrypted for another account"})));
+    c.apply_audit(
+        1,
+        Ok(json!({"ok": false, "error": "encrypted for another account"})),
+    );
     let a = c.get_audits_of(auditor()).pop().unwrap();
     assert_eq!(a.status, AuditStatus::Failed);
     assert_eq!(a.error.as_deref(), Some("encrypted for another account"));
     c.apply_audit(1, Ok(json!({"ok": true, "sealed": sealed()})));
-    assert_eq!(c.get_audits_of(auditor())[0].status, AuditStatus::Failed, "a settled audit stays settled");
+    assert_eq!(
+        c.get_audits_of(auditor())[0].status,
+        AuditStatus::Failed,
+        "a settled audit stays settled"
+    );
 }
 
 #[test]
@@ -1050,7 +1106,11 @@ fn a_failed_withdrawal_restores_the_earnings() {
     c.on_withdrawn(f.clone(), U128(PRICE / 5), Err(PromiseError::Failed));
     assert_eq!(c.get_earnings(f.clone()).0, PRICE / 5);
     c.on_withdrawn(f.clone(), U128(PRICE / 5), Ok(()));
-    assert_eq!(c.get_earnings(f).0, PRICE / 5, "a successful transfer changes nothing");
+    assert_eq!(
+        c.get_earnings(f).0,
+        PRICE / 5,
+        "a successful transfer changes nothing"
+    );
 }
 
 #[test]
@@ -1059,37 +1119,318 @@ fn long_enclave_errors_are_cut() {
     let id = buy(&mut c);
     c.apply_delivery(id, Err("é".repeat(400)));
     let err = purchase(&c, id).error.unwrap();
-    assert!(err.len() <= MAX_ERROR + '…'.len_utf8() && err.ends_with('…'), "{}", err.len());
+    assert!(
+        err.len() <= MAX_ERROR + '…'.len_utf8() && err.ends_with('…'),
+        "{}",
+        err.len()
+    );
 }
 
 // ---- upgrade ----
 
 #[test]
-fn migrate_keeps_the_first_deployments_state() {
-    testing_env!(ctx(&owner(), 0, 100));
-    let mut members = IterableSet::new(StorageKey::Members);
-    for f in funds().into_iter().take(4) {
-        members.insert(f);
-    }
-    let old = NemaV1 {
-        owner: owner(),
-        outlayer_id: "outlayer.testnet".parse().unwrap(),
-        project_id: "nema-dev.testnet/nema-aggregator".into(),
-        secrets_account: "nema-dev.testnet".parse().unwrap(),
-        secrets_profile: "default".into(),
-        min_contributors: 4,
-        read_price: PRICE,
+fn migrate_keeps_rounds_reads_and_earnings() {
+    // The previous build's state: a published round with a delivered read.
+    let mut c = published();
+    let id = buy(&mut c);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    let Nema {
+        owner,
+        outlayer_id,
+        project_id,
+        secrets_account,
+        secrets_profile,
+        min_contributors,
+        read_price,
         members,
-        rounds: IterableMap::new(StorageKey::Rounds),
-        next_round_id: 1,
-        purchases: IterableMap::new(StorageKey::Purchases),
-        next_purchase_id: 1,
-        earnings: LookupMap::new(StorageKey::Earnings),
+        rounds,
+        next_round_id,
+        purchases,
+        next_purchase_id,
+        earnings,
+        applications,
+        auditors,
+        audits,
+        next_audit_id,
+        purchases_by_buyer,
+        audits_by_auditor,
+        ..
+    } = c;
+    let old = NemaV2 {
+        owner,
+        outlayer_id,
+        project_id,
+        secrets_account,
+        secrets_profile,
+        min_contributors,
+        read_price,
+        members,
+        rounds,
+        next_round_id,
+        purchases,
+        next_purchase_id,
+        earnings,
+        applications,
+        auditors,
+        audits,
+        next_audit_id,
+        purchases_by_buyer,
+        audits_by_auditor,
     };
     env::state_write(&old);
     drop(old);
     let c = Nema::migrate();
-    assert_eq!(c.get_members().len(), 4);
-    assert_eq!(c.get_config()["read_price"], json!(U128(PRICE)));
-    assert!(c.get_applications().is_empty());
+    assert_eq!(c.get_members().len(), 5);
+    assert_eq!(status(&c), RoundStatus::Published);
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Delivered);
+    assert_eq!(c.get_earnings(accounts(1)).0, PRICE / 5);
+}
+
+// ---- reliability: idempotent reads, settling unanswered calls ----
+
+/// Seconds after `close` (t=1001s) at which the tally is old enough to settle.
+const STALE: u64 = 1001 + 30 * 60;
+
+#[test]
+#[should_panic(expected = "this key already has a copy")]
+fn retrying_a_read_with_the_same_key_does_not_pay_twice() {
+    let mut c = published();
+    buy(&mut c);
+    buy(&mut c);
+}
+
+#[test]
+fn a_new_key_or_a_refunded_read_can_buy_again() {
+    let mut c = published();
+    let first = buy(&mut c);
+    c.apply_delivery(first, Err("enclave down".into()));
+    assert_eq!(purchase(&c, first).status, PurchaseStatus::Refunded);
+    let again = buy(&mut c);
+    assert_ne!(again, first, "a refunded read doesn't block a retry");
+    testing_env!(ctx(&buyer(), PRICE + READ, 1100));
+    let _ = c.buy_read(1, format!("03{}", "cd".repeat(32)));
+    assert_eq!(c.get_purchases_of(buyer()).len(), 3);
+}
+
+#[test]
+fn a_tally_that_never_answers_can_be_settled_and_closed_again() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    assert_eq!(status(&c), RoundStatus::Closing);
+    testing_env!(ctx(&accounts(2), 0, STALE));
+    c.reconcile_round(1);
+    assert_eq!(status(&c), RoundStatus::CloseFailed);
+    // The lost answer turning up late changes nothing.
+    let h = set_hash(&c);
+    c.apply_tally(1, Ok(good_tally(&h)));
+    assert_eq!(status(&c), RoundStatus::CloseFailed);
+    testing_env!(ctx(&accounts(2), DEPOSIT, STALE));
+    let _ = c.close_round(1);
+    assert_eq!(status(&c), RoundStatus::Closing);
+}
+
+#[test]
+#[should_panic(expected = "the enclave may still answer")]
+fn a_tally_cannot_be_settled_early() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    testing_env!(ctx(&accounts(2), 0, STALE - 1));
+    c.reconcile_round(1);
+}
+
+#[test]
+#[should_panic(expected = "nothing is waiting on the enclave here")]
+fn settling_needs_something_waiting() {
+    let mut c = published();
+    testing_env!(ctx(&accounts(2), 0, 100_000));
+    c.reconcile_round(1);
+}
+
+#[test]
+fn a_read_that_never_answers_is_refunded_and_pays_nobody() {
+    let mut c = published();
+    let id = buy(&mut c);
+    testing_env!(ctx(&accounts(2), 0, 1100 + 30 * 60));
+    let _ = c.reconcile_read(id);
+    let p = purchase(&c, id);
+    assert_eq!(p.status, PurchaseStatus::Refunded);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    assert_eq!(
+        purchase(&c, id).status,
+        PurchaseStatus::Refunded,
+        "a late delivery is ignored"
+    );
+    for f in funds() {
+        assert_eq!(c.get_earnings(f).0, 0, "nobody is paid for a refunded read");
+    }
+}
+
+#[test]
+fn an_audit_that_never_answers_can_be_settled() {
+    let mut c = with_open_round();
+    let f = funds()[1].clone();
+    name_auditor(&mut c, &f);
+    submit_from(&mut c, &f, 9);
+    close(&mut c);
+    testing_env!(ctx(&auditor(), READ, 1100));
+    let _ = c.request_audit(1, f, pubkey());
+    testing_env!(ctx(&accounts(2), 0, 1100 + 30 * 60));
+    c.reconcile_audit(1);
+    assert_eq!(c.get_audits_of(auditor())[0].status, AuditStatus::Failed);
+}
+
+// ---- access control: checked again when the enclave's answer lands ----
+
+#[test]
+fn an_audit_landing_after_the_fund_changed_auditor_is_not_delivered() {
+    let mut c = with_open_round();
+    let f = funds()[1].clone();
+    name_auditor(&mut c, &f);
+    submit_from(&mut c, &f, 9);
+    close(&mut c);
+    testing_env!(ctx(&auditor(), READ, 1100));
+    let _ = c.request_audit(1, f.clone(), pubkey());
+    testing_env!(ctx(&f, 0, 1101));
+    c.set_auditor(None);
+    c.apply_audit(1, Ok(json!({"ok": true, "sealed": sealed()})));
+    let a = c.get_audits_of(auditor()).pop().unwrap();
+    assert_eq!((a.status, a.sealed), (AuditStatus::Failed, None));
+    assert!(a.error.unwrap().contains("changed its auditor"));
+}
+
+#[test]
+fn a_fund_removed_before_the_close_does_not_count() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    testing_env!(ctx(&owner(), 0, 300));
+    c.remove_member(funds()[0].clone());
+    close(&mut c);
+    let r = c.get_round(U64(1)).unwrap();
+    assert_eq!(r.status, RoundStatus::Closing);
+    assert!(
+        !r.submitted.contains(&funds()[0]),
+        "its mark left the committed set"
+    );
+    assert_eq!(r.submitted.len(), 4);
+}
+
+#[test]
+fn removing_enough_funds_fails_the_round_at_close() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    testing_env!(ctx(&owner(), 0, 300));
+    c.remove_member(funds()[0].clone());
+    c.remove_member(funds()[1].clone());
+    close(&mut c);
+    assert_eq!(status(&c), RoundStatus::Failed);
+}
+
+// ---- invariants ----
+
+#[test]
+fn every_read_price_splits_exactly_with_nothing_lost_or_made() {
+    // Every price and panel size: shares plus remainder equal what was paid.
+    for n in 4..=12usize {
+        let contributors: Vec<AccountId> = (0..n)
+            .map(|i| format!("f{i}.testnet").parse().unwrap())
+            .collect();
+        for price in [
+            1u128,
+            3,
+            7,
+            99,
+            1_000,
+            PRICE,
+            PRICE * 7 + 11,
+            u64::MAX as u128,
+        ] {
+            let mut c = fresh();
+            let held = |c: &Nema| -> Vec<u128> {
+                contributors
+                    .iter()
+                    .chain([&owner()])
+                    .map(|a| c.get_earnings(a.clone()).0)
+                    .collect()
+            };
+            let before = held(&c);
+            c.credit_contributors(&contributors, price);
+            let gained: Vec<u128> = held(&c).iter().zip(&before).map(|(a, b)| a - b).collect();
+            assert_eq!(gained.iter().sum::<u128>(), price, "n={n} price={price}");
+            assert!(
+                gained[..n].windows(2).all(|w| w[0] == w[1]),
+                "equal shares for n={n}"
+            );
+            assert!(
+                gained[n] < n as u128,
+                "the remainder is less than one yocto per fund"
+            );
+        }
+    }
+}
+
+#[test]
+fn state_changes_are_emitted_as_events() {
+    let _c = published(); // open, key, submissions, close and tally
+    let logs = near_sdk::test_utils::get_logs();
+    let events: Vec<String> = logs
+        .iter()
+        .filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| serde_json::from_str::<Value>(j).unwrap())
+        .filter(|e| e["standard"] == "nema")
+        .map(|e| e["event"].as_str().unwrap().to_string())
+        .collect();
+    for want in ["tally_requested", "round_published"] {
+        assert!(
+            events.iter().any(|e| e == want),
+            "missing {want} in {events:?}"
+        );
+    }
+}
+
+/// NEAR sent back to `to` by the receipts this call created.
+fn refunded_to(to: &AccountId) -> u128 {
+    near_sdk::test_utils::get_created_receipts()
+        .iter()
+        .filter(|r| &r.receiver_id == to)
+        .flat_map(|r| r.actions.iter())
+        .filter_map(|a| match a {
+            near_sdk::mock::MockAction::Transfer { deposit, .. } => Some(deposit.as_yoctonear()),
+            _ => None,
+        })
+        .sum()
+}
+
+#[test]
+fn a_refused_delivery_sends_the_price_back() {
+    let mut c = published();
+    let id = buy(&mut c);
+    c.apply_delivery(id, Err("enclave down".into()));
+    assert_eq!(refunded_to(&buyer()), PRICE);
+}
+
+#[test]
+fn settling_an_unanswered_read_sends_the_price_back() {
+    let mut c = published();
+    let id = buy(&mut c);
+    testing_env!(ctx(&accounts(2), 0, 1100 + 30 * 60));
+    let _ = c.reconcile_read(id);
+    assert_eq!(refunded_to(&buyer()), PRICE);
+}
+
+#[test]
+fn the_wait_is_visible_until_the_call_settles() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    assert_eq!(
+        c.get_pending_since("round".into(), U64(1)),
+        Some(U64(1001 * NS))
+    );
+    let h = set_hash(&c);
+    c.apply_tally(1, Ok(good_tally(&h)));
+    assert_eq!(c.get_pending_since("round".into(), U64(1)), None);
 }
