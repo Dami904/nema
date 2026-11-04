@@ -3,15 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "test": "tsx scripts/check-crypto.ts",
-    "smoke": "tsx scripts/smoke.ts",
-    "close-rounds": "tsx scripts/close-rounds.ts",
-    "check-attest": "tsx scripts/check-attest.ts"
+    "live:smoke": "tsx scripts/smoke.ts",
+    "live:close-rounds": "tsx scripts/close-rounds.ts",
+    "live:check-attest": "tsx scripts/check-attest.ts",
+    "live:deploy": "vercel build --prod && vercel deploy --prebuilt --prod",
+    "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
     "@near-wallet-selector/core": "10.1.4",
@@ -26,12 +31,17 @@
     "react-router-dom": "7.18.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.15.30",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^16.5.0",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "8.3.5"
   }
 }

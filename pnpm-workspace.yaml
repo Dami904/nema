@@ -1,0 +1,9 @@
+packages:
+  - web
+  - interop
+
+# Install scripts that may run. esbuild checks its platform binary; secp256k1's
+# native build is optional (it falls back to pure JS), so it is skipped.
+allowBuilds:
+  esbuild: true
+  secp256k1: false

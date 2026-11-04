@@ -2,8 +2,8 @@
 // against tampered copies of it, which must fail. Network: OutLayer's public API
 // and NEAR RPC (read only).
 //
-//   npm run check-attest -- --job 1256360 --network mainnet
-//   npm run check-attest -- --job 16947 --network testnet --contract nema-dev.testnet
+//   pnpm live:check-attest --job 1256360 --network mainnet
+//   pnpm live:check-attest --job 16947 --network testnet --contract nema-dev.testnet
 
 import { attestationOf, netFor, verifyRun, type Attestation } from "../src/lib/attest";
 import { arg } from "./cli";

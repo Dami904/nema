@@ -1,7 +1,7 @@
 // Closes every round whose deadline has passed (and retries failed closes), so a
 // round never waits on someone opening the page. Safe to run repeatedly.
 //
-//   npm run close-rounds -- --signer fund1.nema-dev.testnet
+//   pnpm live:close-rounds --signer fund1.nema-dev.testnet
 //
 // Each close attaches 0.01 NEAR for the enclave; a round with too few marks gets
 // it back.

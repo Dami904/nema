@@ -1,0 +1,114 @@
+# OutLayer and NEAR: what we observed
+
+How the outside services Nema depends on actually behaved on testnet, as opposed
+to what their docs led us to expect. Each entry says where it was seen. The
+contract and the scripts are written against these notes.
+
+## `request_execution` (outlayer.testnet)
+
+**The callback gets the module's raw JSON, or `null`.**
+The docs suggested an envelope like `{ success, output, error }`. The contract
+first deserialized into that and every callback failed with
+`missing field success`. In fact the callback's promise result is whatever the
+module printed to stdout, parsed as JSON. When the run fails (module error,
+limits hit, no worker), it is `null`. So the contract takes a raw `Value` and
+treats `null` as a failed run (`outcome()` in `contract/src/lib.rs`). The test
+`outcome_maps_enclave_responses` uses the exact bytes testnet returned.
+
+**It is asynchronous, and success means "accepted".**
+The transaction that calls `request_execution` succeeds as soon as OutLayer
+queues the job. The result arrives later, in a callback receipt (yield/resume).
+So nothing the contract does in the calling transaction can assume the run
+happened. Every call that reaches the enclave leaves a record in a waiting state
+(`AwaitingKey`, `Closing`, a `Pending` read or audit) that only the callback
+moves on.
+
+**A callback can, in principle, never arrive.**
+In every run we made (jobs 16942 to 16956), the callback fired, success or
+failure. The contract still does not rely on that: each waiting record has a
+timestamp (`get_pending_since`), and 30 minutes later anyone can settle it with
+`reconcile_round`, `reconcile_read` or `reconcile_audit`. Settling a read refunds
+its price. A late callback for something already settled is ignored and logged
+as a `callback_ignored` event.
+
+**It is not idempotent.**
+Calling it twice runs the module twice and charges twice. OutLayer has no
+request key. Idempotency is the contract's job: a round can only be `Closing`
+once at a time, and a second read for the same `(buyer, round, buyer key)`
+that is not refunded is refused before any OutLayer call is made
+(`retrying_a_read_with_the_same_key_does_not_pay_twice`).
+
+**The deposit is a fee cap.**
+The contract attaches the enclave fee (0.01 NEAR) and names the user who paid it
+as `payer`, the account OutLayer's interface returns unused deposit to. We have
+not measured how much comes back per run, or whether a failed run is charged in
+full.
+
+**`NEAR_PREDECESSOR_ID` is the calling contract.**
+The enclave's caller check (`req.contract() != predecessor`) rests on this. The
+tally in job 16947 went through, and the module refuses any other caller, so the
+module saw `nema-dev.testnet`.
+
+## Secrets
+
+**A secret's access lock is judged against the signer unless you say otherwise.**
+The first lock whitelisted `nema-dev.testnet` as an account. A tally requested
+by a fund through the contract was denied, because the account checked was the
+fund that signed, not the contract that called. The lock now uses
+`Predecessor{Whitelist[nema-dev.testnet]}`, which checks the calling account:
+
+```json
+{"Logic":{"operator":"And","conditions":[
+  {"Predecessor":{"condition":{"Whitelist":{"accounts":["nema-dev.testnet"]}}}},
+  {"WasmHash":{"hash":"3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6"}}
+]}}
+```
+
+**`update_access` needs a storage deposit.**
+Without one it fails. 0.0003 NEAR was enough.
+
+**Runs are filed under the signer.**
+OutLayer's job list for an account shows runs signed by that account, so the
+site finds a round's runs under the owner (key), the closer (tally) and the
+reader (copies and audits).
+
+## Builds
+
+**GitHub builds are disabled on OutLayer testnet.**
+The project source is a `WasmUrl` pointing at the `enclave-v2` GitHub release
+asset. OutLayer follows the release redirect and refuses the file unless its
+bytes hash to the registered sha256.
+
+**The wasm hash depends on the build machine.**
+Panic messages embed the Cargo registry path (`C:\Users\USER\.cargo\registry\…`)
+and Windows-style workspace paths. The pinned hash reproduces with Rust 1.96 on
+Windows with `CARGO_HOME=C:\Users\USER\.cargo`; CI's `reproduce` job does exactly
+that. A Linux build of the same source gives a different hash, and the secret
+lock would refuse it.
+
+**Any change to the enclave source changes the hash.**
+Even a reformat moves line numbers in panic messages. The enclave source is
+frozen; lint exceptions go in `[lints]` in `aggregator/Cargo.toml`, which leaves
+the hash unchanged (checked).
+
+## Attestations
+
+**The API is evidence, not a verdict.**
+OutLayer's attestation endpoint returns the quote and the run's fields. The app
+recomputes the task hash and checks the quote itself (`web/src/lib/attest.ts`).
+The request is found by its `EVENT_JSON` log with standard `near-outlayer` and
+event `execution_requested`; Nema's own events share the transaction, so the
+standard is checked too.
+
+## NEAR RPC
+
+**FastNEAR returns views as byte arrays.**
+`result.result` is an array of bytes holding UTF-8 JSON. `web/src/lib/near.ts`
+decodes it. Views are read-only and safe to retry; the app polls every 15
+seconds.
+
+**A transaction that times out on the RPC may still land.**
+Neither the app nor the scripts look a timed-out transaction up by hash; they
+report it as failed. Resending is safe for reads and closes because the contract
+refuses the duplicate (same key, or a round already `Closing`), and the app
+refetches state every 15 seconds, so a transaction that did land shows up.

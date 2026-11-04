@@ -3,7 +3,7 @@
 // private on chain. Every transaction is real and signed with NEAR CLI from the
 // OS keychain.
 //
-//   npm run smoke -- --owner nema-dev.testnet --funds fund1.nema-dev.testnet,fund2...,fund3...,fund4... \
+//   pnpm live:smoke --owner nema-dev.testnet --funds fund1.nema-dev.testnet,fund2...,fund3...,fund4... \
 //                    --lender lender.nema-dev.testnet --minutes 4
 //
 // Add --round <id> to pick up a round this script already opened and published
