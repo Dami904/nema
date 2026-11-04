@@ -42,15 +42,15 @@ function nearCli(): [string, string[]] {
 
 let cli: [string, string[]] | undefined;
 
-/** Signs `method` as `signer` with NEAR CLI and waits for the transaction. */
-export function call(signer: string, method: string, args: object, deposit = 0n, tgas = 30): void {
+/** Signs `method` on the Nema contract (or `contract`) as `signer` with NEAR CLI and waits for the transaction. */
+export function call(signer: string, method: string, args: object, deposit = 0n, tgas = 30, contract = CONFIG.contract): void {
   cli ??= nearCli();
   const [bin, pre] = cli;
   const r = spawnSync(
     bin,
     [
       ...pre,
-      "contract", "call-function", "as-transaction", CONFIG.contract, method,
+      "contract", "call-function", "as-transaction", contract, method,
       "json-args", JSON.stringify(args),
       "prepaid-gas", `${tgas} Tgas`,
       "attached-deposit", nearString(deposit),

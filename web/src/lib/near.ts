@@ -20,12 +20,12 @@ async function rpc<T>(method: string, params: unknown): Promise<T> {
   return body.result as T;
 }
 
-/** Calls a view method on the Nema contract. */
-export async function view<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
+/** Calls a view method on the Nema contract, or on `account` if given. */
+export async function view<T>(method: string, args: Record<string, unknown> = {}, account = CONFIG.contract): Promise<T> {
   const result = await rpc<{ result?: number[]; error?: string }>("query", {
     request_type: "call_function",
     finality: "optimistic",
-    account_id: CONFIG.contract,
+    account_id: account,
     method_name: method,
     args_base64: btoa(JSON.stringify(args)),
   });

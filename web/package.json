@@ -15,6 +15,7 @@
     "live:smoke": "tsx scripts/smoke.ts",
     "live:close-rounds": "tsx scripts/close-rounds.ts",
     "live:check-attest": "tsx scripts/check-attest.ts",
+    "live:enclave-source": "tsx scripts/enclave-source.ts",
     "live:deploy": "pnpm dlx vercel@58.4.4 build --prod && pnpm dlx vercel@58.4.4 deploy --prebuilt --prod",
     "lint": "eslint . --max-warnings 0"
   },

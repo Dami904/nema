@@ -90,7 +90,9 @@ The project source is a `WasmUrl` pointing at the file on FastFS
 (`https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm`).
 OutLayer refuses the file unless its bytes hash to the registered sha256. The
 same bytes are the `enclave-v2` GitHub release asset, which served as the
-source until 2026-11-04.
+source until 2026-11-04 and is now the standby. A version has one URL, so there
+is no automatic failover: if FastFS stops serving, `pnpm live:enclave-source
+github` moves the project to the release (and `fastfs` moves it back).
 
 **A FastFS upload can report a failed transaction and still land.**
 `outlayer upload` sends the file as transaction arguments to `outlayer.testnet`.
@@ -102,7 +104,9 @@ transaction status.
 `add_version` refuses a hash the project already has. Moving the live build to
 FastFS took `set_active_version` to an older build, `remove_version`, then
 `add_version` with `set_active: true`. The secret lock checks the wasm hash, not
-the URL, so the secret kept working; round 4 ran on it.
+the URL, so the secret kept working; round 4 ran on it. `pnpm
+live:enclave-source` does the same three calls, after checking that the target
+host serves the right bytes.
 
 **The wasm hash depends on the build machine.**
 Panic messages embed the Cargo registry path (`C:\Users\USER\.cargo\registry\…`)

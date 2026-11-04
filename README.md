@@ -447,7 +447,7 @@ NEAR testnet:
 | --- | --- |
 | Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `05e0b58ede2fbb1899d9673b980e6166a82a9d7c380298d876c37af4939108f8` |
 | Enclave project | OutLayer `nema-dev.testnet/nema-aggregator` |
-| Enclave build | on [FastFS](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm) (also the [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release) · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproduces with Rust 1.96 on Windows with `CARGO_HOME=C:\Users\USER\.cargo`, since the wasm embeds that path; CI checks it) |
+| Enclave build | on [FastFS](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm) (live) and the [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release (standby, same bytes; `pnpm live:enclave-source` checks both and switches) · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproduces with Rust 1.96 on Windows with `CARGO_HOME=C:\Users\USER\.cargo`, since the wasm embeds that path; CI checks it) |
 | Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet]}, WasmHash(3ed58517…)]` |
 | Web app | [nema-near.vercel.app](https://nema-near.vercel.app) (Vercel, static) |
 

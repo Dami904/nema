@@ -19,6 +19,12 @@ export const BUILDS = {
   enclaveProject: "nema-dev.testnet/nema-aggregator",
 };
 
+/** Two hosts serve the same enclave bytes; the OutLayer project loads one (`pnpm live:enclave-source`). */
+export const ENCLAVE_URLS = {
+  fastfs: `https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/${BUILDS.enclaveWasmSha256}.wasm`,
+  github: "https://github.com/Dami904/nema/releases/download/enclave-v2/nema-aggregator.wasm",
+};
+
 /** OutLayer's minimum deposit for one enclave call, on top of the read price. */
 export const ENCLAVE_FEE_YOCTO = 10n ** 22n;
 /** Kept by the contract on every read and audit, for the record it stores. */
