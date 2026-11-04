@@ -86,9 +86,23 @@ reader (copies and audits).
 ## Builds
 
 **GitHub builds are disabled on OutLayer testnet.**
-The project source is a `WasmUrl` pointing at the `enclave-v2` GitHub release
-asset. OutLayer follows the release redirect and refuses the file unless its
-bytes hash to the registered sha256.
+The project source is a `WasmUrl` pointing at the file on FastFS
+(`https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm`).
+OutLayer refuses the file unless its bytes hash to the registered sha256. The
+same bytes are the `enclave-v2` GitHub release asset, which served as the
+source until 2026-11-04.
+
+**A FastFS upload can report a failed transaction and still land.**
+`outlayer upload` sends the file as transaction arguments to `outlayer.testnet`.
+The call itself ran out of gas both times, but FastFS indexes the arguments, so
+the URL served the exact bytes right away. Check the URL's sha256, not the
+transaction status.
+
+**Versions are keyed by hash, so a new URL for the same build needs a swap.**
+`add_version` refuses a hash the project already has. Moving the live build to
+FastFS took `set_active_version` to an older build, `remove_version`, then
+`add_version` with `set_active: true`. The secret lock checks the wasm hash, not
+the URL, so the secret kept working; round 4 ran on it.
 
 **The wasm hash depends on the build machine.**
 Panic messages embed the Cargo registry path (`C:\Users\USER\.cargo\registry\…`)

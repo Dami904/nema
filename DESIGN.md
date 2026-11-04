@@ -6,7 +6,7 @@ Working notes, not marketing. Updated as decisions are made.
 
 | Part | Where | State |
 | --- | --- | --- |
-| Enclave module (derive key, tally, sealed delivery, audit) | `aggregator/` | Done, 32 tests, builds to wasm32-wasip2 (461 KB, sha256 `3ed58517…50d6`), active on OutLayer from the `enclave-v2` release |
+| Enclave module (derive key, tally, sealed delivery, audit) | `aggregator/` | Done, 32 tests, builds to wasm32-wasip2 (461 KB, sha256 `3ed58517…50d6`), active on OutLayer from FastFS (same bytes as the `enclave-v2` release) |
 | NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done, 117 unit tests. Live on testnet (sha256 `05e0b58e…08f8`), migrated in place from each earlier build |
 | Browser crypto check (eciesjs 0.5.0) | `interop/` | Done: both directions verified against the enclave code |
 | Web UI (encrypt in browser, submit, buy or claim, open the sealed copy, audit) | `web/` | Done, sample data for every state; no live call sent yet |

@@ -9,7 +9,7 @@ What Nema does not do yet, or does only partly. Each item says why.
   redeploy the contract or change the enclave's secret lock, and with either can
   expose marks. Removing the key is permanent, so it waits for the final deploy.
   See [THREAT_MODEL.md](THREAT_MODEL.md).
-- **The live rounds are test rounds.** Rounds 2 and 3 ran in full with four
+- **The live rounds are test rounds.** Rounds 2, 3 and 4 ran in full with four
   funds, a lender and an auditor, but all of them are accounts the author controls.
 - **One OutLayer project, one master secret, no rotation.** A new secret means new
   round keys; old rounds stay tied to the old secret.
