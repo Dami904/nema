@@ -508,9 +508,9 @@ No environment variables are needed for testnet. To point at another contract or
 network, set the `VITE_*` values from `web/.env.example`; they end up in the
 browser bundle, so put nothing secret there. Lint fails on any environment read
 outside `web/src/lib/config.ts`, on any non-`VITE_*` key inside it, and on
-`process.env` anywhere in the app. To host your own copy, import the repo into Vercel with
-the root directory set to `web`, or deploy from your machine with
-`pnpm live:deploy` in `web/` (builds locally, uploads the output).
+`process.env` anywhere in the app. The live site deploys itself on every push to
+`main`: Vercel builds from `web/`. To host your own copy, import the repo into Vercel
+with the root directory set to `web`.
 
 Scripts that sign or spend are named `live:*` and never run in CI. One of them is
 a keeper: `pnpm live:close-rounds --signer <account>` closes every round past its
