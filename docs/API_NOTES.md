@@ -83,6 +83,15 @@ OutLayer's job list for an account shows runs signed by that account, so the
 site finds a round's runs under the owner (key), the closer (tally) and the
 reader (copies and audits).
 
+**The job list can't be read from another site's page.**
+By 2026-11-11 `/public/jobs` answered with no CORS header for any origin but
+OutLayer's own dashboard, so the browser refused it and the Verify tab showed no
+runs. `/attestations/<job>` still sends `access-control-allow-origin: *`. The
+site now asks for the list through its own origin (`/outlayer/testnet/jobs`),
+which the host forwards unchanged (`web/vercel.json`; `web/vite.config.ts` does
+the same in development). The list only says which runs exist; each run is still
+checked against its Intel quote in the browser.
+
 ## Builds
 
 **GitHub builds are disabled on OutLayer testnet.**
@@ -135,6 +144,13 @@ standard is checked too.
 `result.result` is an array of bytes holding UTF-8 JSON. `web/src/lib/near.ts`
 decodes it. Views are read-only and safe to retry; the app polls every 15
 seconds.
+
+**The ordinary RPC forgets transactions after a few days.**
+A week after rounds 2 to 4, `rpc.testnet.fastnear.com` no longer knew their
+transactions, so the attestation check couldn't read the request and dropped
+every run. Transaction lookups for a run now ask the ordinary node and an
+archival one (`archival-rpc.testnet.fastnear.com`) together and take the first
+answer.
 
 **A transaction that times out on the RPC may still land.**
 When the wallet throws for any reason but a cancel, the app does not call it

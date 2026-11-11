@@ -62,6 +62,11 @@ What Nema does not do yet, or does only partly. Each item says why.
   transaction API before calling it failed. If that API is down or behind, the
   app says nothing was found; the 15-second refresh still shows one that landed,
   and the contract refuses a duplicate read or close.
+- **Finding a round's enclave runs depends on two outside services.** The list of
+  runs comes from OutLayer's API through a forwarding rule on the site's host, and
+  a round older than a few days needs an archival NEAR node to read its
+  transactions. If either is down the Verify tab shows no runs; `pnpm
+  live:check-attest --job <id>` still checks one from a terminal.
 - **Switching enclave hosts is manual.** The OutLayer project loads the enclave
   from FastFS, with the GitHub release as a standby copy of the same bytes. A
   version has one URL, so if FastFS stops serving, someone runs `pnpm
@@ -76,4 +81,5 @@ What Nema does not do yet, or does only partly. Each item says why.
   marks are dropped. Track records and auditors show the rest over time.
 - **Mobile wallets beyond Meteor, MyNearWallet and HERE.**
 - **A server.** There is none: the app is static, and everything it shows comes
-  from the chain or OutLayer's public API.
+  from the chain or OutLayer's public API. The one exception is a forwarding
+  rule on the host for OutLayer's job list, which browsers can't read directly.

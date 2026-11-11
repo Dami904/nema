@@ -78,18 +78,15 @@ async function getJson<T>(url: string): Promise<T> {
 /**
  * An account's recent OutLayer runs. OutLayer's job list only lets its own
  * dashboard read it from a browser (no CORS header for other sites), so in a
- * browser a refused request is retried through this site's own `/outlayer/…`
- * path, which the host forwards to the same endpoint. The list is only how
+ * browser it is asked through this site's own `/outlayer/…` path, which the
+ * host forwards to the same endpoint. The list is only how
  * runs are found: each one is still checked against its Intel quote.
  */
 export async function jobsOf(account: string, net = NET): Promise<Job[]> {
   const query = `limit=50&offset=0&source=near&user_account_id=${encodeURIComponent(account)}`;
-  try {
-    return await getJson<Job[]>(`${net.api}/public/jobs?${query}`);
-  } catch (e) {
-    if (typeof window === "undefined") throw e;
-    return getJson<Job[]>(`${window.location.origin}/outlayer/${net.network}/jobs?${query}`);
-  }
+  const direct = `${net.api}/public/jobs?${query}`;
+  if (typeof window === "undefined") return getJson<Job[]>(direct);
+  return getJson<Job[]>(`${window.location.origin}/outlayer/${net.network}/jobs?${query}`).catch(() => getJson<Job[]>(direct));
 }
 
 export const attestationOf = (jobId: number, net = NET) => getJson<Attestation>(`${net.api}/attestations/${jobId}`);
@@ -133,11 +130,9 @@ type TxStatus = {
 export async function requestOf(att: Attestation, net = NET): Promise<Requested | null> {
   if (!att.transaction_hash || !att.caller_account_id) return null;
   const params = { tx_hash: att.transaction_hash, sender_account_id: att.caller_account_id, wait_until: "FINAL" };
-  // The ordinary RPC forgets a transaction after a few days, so a round older
-  // than that is read from an archival node.
-  const tx = await rpc<TxStatus>(net, "EXPERIMENTAL_tx_status", params).catch(() =>
-    rpc<TxStatus>(net, "EXPERIMENTAL_tx_status", params, net.archivalRpc),
-  );
+  // The ordinary RPC forgets a transaction after a few days and is slow to say
+  // so, so an archival node is asked at the same time and the first answer wins.
+  const tx = await Promise.any([net.rpc, net.archivalRpc].map((url) => rpc<TxStatus>(net, "EXPERIMENTAL_tx_status", params, url)));
   let found: Requested | null = null;
   const returns: string[] = [];
   for (const { outcome } of tx.receipts_outcome) {

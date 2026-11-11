@@ -139,7 +139,7 @@ ECIES: secp256k1, uncompressed ephemeral key, HKDF-SHA256, AES-256-GCM with a
   input, and the attested output must match what the contract stored. Intel TCB
   status and revocation are not checked in the browser.
 - The master secret is bound to the enclave build hash (`--build`), so the new
-  enclave build needs the secret generated again. No round has run, so no key or
+  enclave build needs the secret generated again. No round had run at that point, so no key or
   result is lost.
 
 ## What is not verified
