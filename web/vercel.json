@@ -4,5 +4,9 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/outlayer/testnet/jobs", "destination": "https://testnet-api.outlayer.ai/public/jobs" },
+    { "source": "/outlayer/mainnet/jobs", "destination": "https://api.outlayer.ai/public/jobs" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

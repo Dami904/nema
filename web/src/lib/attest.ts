@@ -74,8 +74,22 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
-export const jobsOf = (account: string, net = NET) =>
-  getJson<Job[]>(`${net.api}/public/jobs?limit=50&offset=0&source=near&user_account_id=${encodeURIComponent(account)}`);
+/**
+ * An account's recent OutLayer runs. OutLayer's job list only lets its own
+ * dashboard read it from a browser (no CORS header for other sites), so in a
+ * browser a refused request is retried through this site's own `/outlayer/…`
+ * path, which the host forwards to the same endpoint. The list is only how
+ * runs are found: each one is still checked against its Intel quote.
+ */
+export async function jobsOf(account: string, net = NET): Promise<Job[]> {
+  const query = `limit=50&offset=0&source=near&user_account_id=${encodeURIComponent(account)}`;
+  try {
+    return await getJson<Job[]>(`${net.api}/public/jobs?${query}`);
+  } catch (e) {
+    if (typeof window === "undefined") throw e;
+    return getJson<Job[]>(`${window.location.origin}/outlayer/${net.network}/jobs?${query}`);
+  }
+}
 
 export const attestationOf = (jobId: number, net = NET) => getJson<Attestation>(`${net.api}/attestations/${jobId}`);
 
