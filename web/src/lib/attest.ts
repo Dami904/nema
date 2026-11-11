@@ -9,13 +9,14 @@
 import { CONFIG } from "./config";
 import { sha256Hex, toHex } from "./hashes";
 
-export type Net = { api: string; rpc: string; register: string; dashboard: string; network: string };
+export type Net = { api: string; rpc: string; archivalRpc: string; register: string; dashboard: string; network: string };
 
 export function netFor(network: string): Net {
   const main = network === "mainnet";
   return {
     api: main ? "https://api.outlayer.ai" : "https://testnet-api.outlayer.ai",
     rpc: main ? "https://rpc.mainnet.fastnear.com" : CONFIG.rpc,
+    archivalRpc: main ? "https://archival-rpc.mainnet.fastnear.com" : CONFIG.archivalRpc,
     register: main ? "worker.outlayer.near" : "worker.outlayer.testnet",
     dashboard: "https://app.outlayer.ai/attestation/",
     network,
@@ -93,8 +94,8 @@ export async function jobsOf(account: string, net = NET): Promise<Job[]> {
 
 export const attestationOf = (jobId: number, net = NET) => getJson<Attestation>(`${net.api}/attestations/${jobId}`);
 
-async function rpc<T>(net: Net, method: string, params: unknown): Promise<T> {
-  const res = await fetch(net.rpc, {
+async function rpc<T>(net: Net, method: string, params: unknown, url = net.rpc): Promise<T> {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: "nema", method, params }),
@@ -131,11 +132,12 @@ type TxStatus = {
 
 export async function requestOf(att: Attestation, net = NET): Promise<Requested | null> {
   if (!att.transaction_hash || !att.caller_account_id) return null;
-  const tx = await rpc<TxStatus>(net, "EXPERIMENTAL_tx_status", {
-    tx_hash: att.transaction_hash,
-    sender_account_id: att.caller_account_id,
-    wait_until: "FINAL",
-  });
+  const params = { tx_hash: att.transaction_hash, sender_account_id: att.caller_account_id, wait_until: "FINAL" };
+  // The ordinary RPC forgets a transaction after a few days, so a round older
+  // than that is read from an archival node.
+  const tx = await rpc<TxStatus>(net, "EXPERIMENTAL_tx_status", params).catch(() =>
+    rpc<TxStatus>(net, "EXPERIMENTAL_tx_status", params, net.archivalRpc),
+  );
   let found: Requested | null = null;
   const returns: string[] = [];
   for (const { outcome } of tx.receipts_outcome) {

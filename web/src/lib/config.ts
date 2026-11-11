@@ -4,6 +4,8 @@ const env: Record<string, unknown> = import.meta.env ?? {};
 export const CONFIG = {
   network: (env.VITE_NEAR_NETWORK as string | undefined) ?? "testnet",
   rpc: (env.VITE_NEAR_RPC as string | undefined) ?? "https://rpc.testnet.fastnear.com",
+  /** Keeps old transactions; the ordinary RPC drops them after a few days. */
+  archivalRpc: (env.VITE_NEAR_ARCHIVAL_RPC as string | undefined) ?? "https://archival-rpc.testnet.fastnear.com",
   contract: (env.VITE_NEMA_CONTRACT as string | undefined) ?? "nema-dev.testnet",
   explorerTx: (env.VITE_EXPLORER_TX as string | undefined) ?? "https://testnet.nearblocks.io/txns/",
   explorerAccount: (env.VITE_EXPLORER_ACCOUNT as string | undefined) ?? "https://testnet.nearblocks.io/address/",
