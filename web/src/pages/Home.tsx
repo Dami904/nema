@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Hills, Skeleton } from "../components/bits";
+import { DEMO_PERSONAS, useAccount } from "../lib/account";
 import { useChain } from "../lib/chain";
+import { DEMO_LENDER } from "../lib/demo";
 import { near } from "../lib/format";
 import { FAQ, WHO_SEES_WHAT } from "../lib/content";
 import "./Home.css";
@@ -11,8 +13,11 @@ export default function Home() {
   const open = rounds.filter((r) => r.status === "Open").length;
   const loading = link === "loading";
   const go = useNavigate();
-  const sample = (to: string) => {
+  const { setDemoAccount } = useAccount();
+  /** Opens a page on the sample data, seen as the role the card speaks to. */
+  const sample = (to: string, as?: string) => {
     setDemoMode(true);
+    if (as) setDemoAccount(as);
     go(to);
   };
 
@@ -103,14 +108,14 @@ export default function Home() {
               <p>Every tally carries Intel's signed quote. Your browser checks it against the chain, not against our word.</p>
               <span className="go">See a proof →</span>
             </button>
-            <button className="use" onClick={() => sample("/portfolio")}>
+            <button className="use" onClick={() => sample("/portfolio", DEMO_LENDER)}>
               <UseArt kind="book" />
               <div className="label">Lenders</div>
               <h3>Lend against a fair price</h3>
               <p>Open the consensus, size the borrowing base, watch the whole book for falls and export it for your files.</p>
               <span className="go">See a portfolio →</span>
             </button>
-            <button className="use" onClick={() => sample("/vault")}>
+            <button className="use" onClick={() => sample("/vault", DEMO_PERSONAS[0].id)}>
               <UseArt kind="record" />
               <div className="label">Funds and auditors</div>
               <h3>Know where your marks sit</h3>
