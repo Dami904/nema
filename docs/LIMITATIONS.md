@@ -39,13 +39,13 @@ What Nema does not do yet, or does only partly. Each item says why.
   runs it on a schedule, since that would need a signing key on a server. In
   every testnet run so far the callback did arrive.
 - **Some failure paths have only run in tests.** Rounds 3 to 5 ran on the
-  current build (`05e0b58e…`): storage deposits on marks, the tally, free and paid
+  previous build (`05e0b58e…`, the same logic as today's): storage deposits on marks, the tally, free and paid
   reads, equal shares to the funds, an audit, the refusals of a second free copy
   and of an audit by the wrong account, and (round 5, `pnpm live:smoke --drop`) a
   fund removed before close: its mark was dropped, the round failed with 3 of 4,
   and the closer's deposit came back. Settling a stuck call, a bounced payment
   and a refused enclave call can't be caused on demand and have never happened
-  live; 117 contract tests cover them.
+  live; 118 contract tests cover them.
 - **Enclave quotes are checked, revocation is not.** The browser checks the chain
   to Intel's root and the measurements, not Intel's TCB status or revocation
   lists.

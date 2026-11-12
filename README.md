@@ -9,7 +9,7 @@
 Sealed marks in. One consensus out. Nobody sees a single price.
 
 [![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-156%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![Tests](https://img.shields.io/badge/tests-157%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
@@ -92,9 +92,9 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **156** | automated tests passing: 117 contract, 32 enclave, 7 browser crypto checks               |
+| **157** | automated tests passing: 118 contract, 32 enclave, 7 browser crypto checks               |
 | **19**  | safety guards, each removed in turn to confirm a test fails without it                   |
-| **20**  | checks in the live smoke test, all passing on round 4 (current contract, enclave on FastFS) |
+| **20**  | checks in the live smoke test, all passing on round 4 (enclave on FastFS)                |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
 | **4**   | valid marks at minimum before anything is published                                      |
 
@@ -351,7 +351,7 @@ if set_hash != expected_set_hash {
 
 ## Tested, not claimed
 
-**156 automated tests pass**: 117 contract (`cargo test` in `contract/`), 32 enclave
+**157 automated tests pass**: 118 contract (`cargo test` in `contract/`), 32 enclave
 (`cargo test` in `aggregator/`) and 7 browser crypto checks (`pnpm test`). CI runs
 them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
 rebuild of both wasm files against their pinned hashes, and a scan for committed
@@ -403,7 +403,7 @@ and ignoring a tally that answers an earlier close.
 
 - **Sample mode is sample data.** The **Sample** switch fills every screen with made-up funds, rounds and reads (Calder Logistics, Kestrel Software and others), so each state can be seen without a wallet. Buying a read and submitting a mark play out on that data in the open tab, and a reload starts over. Nothing in it touches the chain.
 - **Live mode is real.** It reads `nema-dev.testnet`, and every action is a signed NEAR testnet transaction.
-- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; rounds 3 and 4 ran on the current build (`05e0b58e…`) on 2026-11-04, round 4 with the enclave loaded from FastFS, round 5 with a fund removed before close (its mark dropped, the round failed with 3 of 4, the deposit returned); round 1 ended without a key while a contract bug was being fixed.
+- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; rounds 3 and 4 ran on the previous build (`05e0b58e…`, same logic) on 2026-11-04, round 4 with the enclave loaded from FastFS, round 5 with a fund removed before close (its mark dropped, the round failed with 3 of 4, the deposit returned); round 1 ended without a key while a contract bug was being fixed.
 - **Testnet only.** No real money moves.
 
 ---
@@ -445,7 +445,7 @@ NEAR testnet:
 
 | What | Where |
 | --- | --- |
-| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `05e0b58ede2fbb1899d9673b980e6166a82a9d7c380298d876c37af4939108f8` |
+| Nema contract | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `248f6ca67c7a058c449cb9349546a63d18b7a2ad31879bb46d09738902f0d24a`, built reproducibly from [`8475de8`](https://github.com/Dami904/nema/tree/8475de86513911a571a29d9038a8a36bdc40d00b) in `sourcescan/cargo-near:0.21.1-rust-1.96.0` (`cd contract && cargo near build reproducible-wasm`; the contract reports this in `contract_source_metadata`, NEP-330) |
 | Enclave project | OutLayer `nema-dev.testnet/nema-aggregator` |
 | Enclave build | on [FastFS](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm) (live) and the [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release (standby, same bytes; `pnpm live:enclave-source` checks both and switches) · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproduces with Rust 1.96 on Windows with `CARGO_HOME=C:\Users\USER\.cargo`, since the wasm embeds that path; CI checks it) |
 | Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet]}, WasmHash(3ed58517…)]` |
@@ -500,8 +500,9 @@ cargo test -p nema-aggregator
 rustup target add wasm32-wasip2
 cargo build -p nema-aggregator --release --target wasm32-wasip2   # target/wasm32-wasip2/release/nema-aggregator.wasm
 
-# Contract: tests and build
-cd contract && cargo test && bash build.sh && cd ..
+# Contract: tests (Linux, macOS or WSL; on Windows near-sdk's crypto needs NASM),
+# then the deployed bytes, built in Docker by cargo-near 0.21.1
+cd contract && cargo test && cargo near build reproducible-wasm && cd ..   # target/near/nema_contract.wasm
 ```
 
 No environment variables are needed for testnet. To point at another contract or

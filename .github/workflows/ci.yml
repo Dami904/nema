@@ -60,8 +60,8 @@ jobs:
       - run: cargo test --locked -p nema-aggregator
       - run: cargo build --locked -p nema-aggregator --release --target wasm32-wasip2
 
-  # The deployed builds embed the builder's Cargo registry path in panic
-  # messages, so their hashes reproduce only on Windows with this Cargo home.
+  # The deployed enclave build embeds the builder's Cargo registry path in panic
+  # messages, so its hash reproduces only on Windows with this Cargo home.
   reproduce:
     runs-on: windows-latest
     env:
@@ -81,13 +81,34 @@ jobs:
           built=$(sha256sum target/wasm32-wasip2/release/nema-aggregator.wasm | cut -d' ' -f1)
           echo "pinned $pinned"; echo "built  $built"
           test -n "$pinned" && test "$pinned" = "$built"
+
+  # The contract is built in the container its Cargo.toml names, the one SourceScan
+  # uses, so this runs anywhere Docker does. The build embeds the commit it came
+  # from (NEP-330), so the check rebuilds that commit, not HEAD.
+  contract-reproduce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install cargo-near 0.21.1
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfLO https://github.com/near/cargo-near/releases/download/cargo-near-v0.21.1/cargo-near-x86_64-unknown-linux-gnu.tar.gz
+          echo "7c63b0a7367e16d5b30ab0764eb1907e49333d48388ada31656ee0cfd181d89e  cargo-near-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c
+          tar xzf cargo-near-x86_64-unknown-linux-gnu.tar.gz
+          echo "$RUNNER_TEMP/cargo-near-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
       - name: Contract wasm matches the deployed hash
         run: |
-          bash contract/build.sh
+          rev=$(sed -nE 's/.*contractSourceRev: "([0-9a-f]{40})".*/\1/p' web/src/lib/config.ts)
           pinned=$(sed -nE 's/.*contractWasmSha256: "([0-9a-f]{64})".*/\1/p' web/src/lib/config.ts)
-          built=$(sha256sum contract/res/nema_contract.wasm | cut -d' ' -f1)
-          echo "pinned $pinned"; echo "built  $built"
-          test -n "$pinned" && test "$pinned" = "$built"
+          test -n "$rev" && test -n "$pinned"
+          git checkout --detach "$rev"
+          cd contract
+          cargo-near near build reproducible-wasm
+          built=$(sha256sum target/near/nema_contract.wasm | cut -d' ' -f1)
+          echo "rev    $rev"; echo "pinned $pinned"; echo "built  $built"
+          test "$pinned" = "$built"
 
   guardrails:
     runs-on: ubuntu-latest

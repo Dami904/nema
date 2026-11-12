@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build the NEAR contract into res/nema_contract.wasm.
 #
-# Built with the default (stable) Rust. With Rust 1.96 and near-sys 0.2.14 this
-# produced sha256 2f7e8f57...37c1, which testnet ran
-# (tx FAD4hwmoA38RwidrrbxnXpBWJZXKZHivsGfDkTzyBTpf). near-sys 0.2.14 needs Rust 1.93+.
+# A quick local build for checking the contract compiles to wasm. It is NOT the
+# deployed build: that one comes from `cargo near build reproducible-wasm`, in the
+# container Cargo.toml names, and embeds the commit it was built from (NEP-330).
 #
 # Pass --opt to also shrink it with wasm-opt (needs Node). The optimized file
 # has not been run on NEAR yet.
