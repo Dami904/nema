@@ -104,3 +104,11 @@ and old rounds stay readable by whoever holds the old one.
 5. **Average out a fund's mark across rounds.** A fund that leaves and rejoins,
    or a panel that barely changes between rounds, lets a reader of many results
    narrow down individual marks. Not modelled or limited.
+6. **An enclave answer big enough to exhaust the callback's gas.** The contract
+   reads up to 256 KiB, and the gas needed to parse that much inside 40 Tgas has
+   not been measured. If a callback ran out of gas, the round, read or audit
+   would stay pending until anyone calls `reconcile_round`, `reconcile_read` or
+   `reconcile_audit` 30 minutes later. If every close of a round got such an
+   answer, each retry would cost another fee. The answer's size depends on the
+   enclave build, not on any caller, so this needs a faulty enclave build.
+   A lower cap would mean a redeploy.

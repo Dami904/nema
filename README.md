@@ -9,7 +9,7 @@
 Sealed marks in. One consensus out. Nobody sees a single price.
 
 [![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-157%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![Tests](https://img.shields.io/badge/tests-160%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
@@ -92,7 +92,7 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **157** | automated tests passing: 118 contract, 32 enclave, 7 browser crypto checks               |
+| **160** | automated tests passing: 121 contract, 32 enclave, 7 browser crypto assertions           |
 | **19**  | safety guards, each removed in turn to confirm a test fails without it                   |
 | **20**  | checks in the live smoke test, all passing on round 6 (current contract, enclave on FastFS) |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
@@ -150,7 +150,7 @@ pass every check (`pnpm live:check-attest --job <id> --network testnet --contrac
 | **fund4 named an auditor, who had the enclave open fund4's mark**, exactly as fund4 sent it | [name](https://testnet.nearblocks.io/txns/ckEgnMEotxSKDFZkxnnbuUZviQKfDDmbeQkTbQD65HY) · [audit](https://testnet.nearblocks.io/txns/DTqbegvLFZQ5ZjECCBTteio2W2jm2vfMBTEyuYf9V52c) | job 16956 ✓ |
 | **Another fund tried to audit fund4**: refused | [refused](https://testnet.nearblocks.io/txns/2SpLVSaZnC1fyF7D48AWkoEtUGdot7uxYKrwR4aUWmKn) | none, by design |
 
-The run is `pnpm live:smoke` in [`web/scripts/smoke.ts`](web/scripts/smoke.ts): 20 checks, all passing on round 4.
+The run is `pnpm live:smoke` in [`web/scripts/smoke.ts`](web/scripts/smoke.ts): 20 checks, all passing on round 6 (the current contract).
 
 ---
 
@@ -241,7 +241,7 @@ flowchart TD
 
 | Path | Role |
 | --- | --- |
-| [`contract/`](contract) | The NEAR contract (near-sdk 5.17), 97 tests |
+| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 121 tests |
 | [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 32 tests |
 | [`web/`](web) | The app (React, Vite): seven pages, sample data for every state, wallet sign-in |
 | [`web/scripts/`](web/scripts) | `smoke.ts` (one full live round), `close-rounds.ts`, `check-attest.ts`, `check-crypto.ts` (the `pnpm test` vectors), `cli.ts` (shared NEAR CLI wrapper) |
@@ -351,7 +351,7 @@ if set_hash != expected_set_hash {
 
 ## Tested, not claimed
 
-**157 automated tests pass**: 118 contract (`cargo test` in `contract/`), 32 enclave
+**160 automated tests pass**: 121 contract (`cargo test` in `contract/`), 32 enclave
 (`cargo test` in `aggregator/`) and 7 browser crypto checks (`pnpm test`). CI runs
 them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
 rebuild of both wasm files against their pinned hashes, and a scan for committed
@@ -382,7 +382,7 @@ and ignoring a tally that answers an earlier close.
 | The contract reads OutLayer's real response | `outcome_maps_enclave_responses`, using the exact bytes OutLayer returned on testnet |
 | Browser, contract and enclave agree byte for byte | the set hash, commitment and sealing vectors in [`testdata/`](testdata), checked by all three |
 | Every enclave run is the published build, asked for by the contract | `pnpm live:check-attest` on jobs 16942, 16947, 16954 and 16956: all checks pass |
-| The whole flow works on the live network | `pnpm live:smoke`: 20 of 20 on round 4, the current contract with the enclave loaded from FastFS (17 of 17 on round 2 with the earlier script) |
+| The whole flow works on the live network | `pnpm live:smoke`: 20 of 20 on round 6, the current contract with the enclave loaded from FastFS (17 of 17 on round 2 with the earlier script) |
 
 ---
 
@@ -455,7 +455,7 @@ NEAR testnet:
 
 ## Tech stack
 
-- **Chain:** NEAR testnet · near-sdk 5.17.2 · Rust
+- **Chain:** NEAR testnet · near-sdk 5.30.1 · Rust
 - **Enclave:** OutLayer · Intel TDX · Rust → `wasm32-wasip2` · `ecies` 0.2 (pure Rust) · `hkdf` · `sha2`
 - **Web:** React 19.3 · Vite 8.3 · React Router 7.18 · TypeScript 5.9 · `eciesjs` 0.5 · NEAR Wallet Selector 10.1 (Meteor, MyNearWallet, HERE)
 - **Hosting:** Vercel (static site); the contract and enclave run on NEAR and OutLayer, so there is no server
@@ -484,8 +484,8 @@ nema/
 ## Run it locally
 
 Requires rustup (`rust-toolchain.toml` pins Rust 1.96, which the pinned hashes need), Node 24 and pnpm 11
-(`corepack enable` picks up the pinned version). Nothing below needs a key, a
-wallet or a network call.
+(`corepack enable` picks up the pinned version). Nothing below needs a key or a
+wallet; the only network use is downloading dependencies and the build image.
 
 ```bash
 git clone https://github.com/Dami904/nema && cd nema
@@ -501,7 +501,8 @@ rustup target add wasm32-wasip2
 cargo build -p nema-aggregator --release --target wasm32-wasip2   # target/wasm32-wasip2/release/nema-aggregator.wasm
 
 # Contract: tests (Linux, macOS or WSL; on Windows near-sdk's crypto needs NASM),
-# then the deployed bytes, built in Docker by cargo-near 0.21.1
+# then the deployed bytes. These need Docker running and cargo-near 0.21.1:
+# its release binary, or `cargo install cargo-near --version 0.21.1 --locked`
 cd contract && cargo test && cargo near build reproducible-wasm && cd ..   # target/near/nema_contract.wasm
 ```
 

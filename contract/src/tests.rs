@@ -1417,6 +1417,23 @@ fn a_refused_delivery_sends_the_price_back() {
 }
 
 #[test]
+fn a_read_answer_too_long_to_read_returns_the_price_not_the_fee() {
+    let mut c = published();
+    let id = buy(&mut c);
+    answered(
+        PromiseResult::Successful(vec![b' '; MAX_ENCLAVE_ANSWER + 1]),
+        1101,
+    );
+    c.on_deliver(id, buyer(), U128(MIN_OUTLAYER_DEPOSIT));
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Refunded);
+    assert_eq!(
+        refunded_to(&buyer()),
+        PRICE,
+        "the enclave ran, so OutLayer keeps its fee; only the price comes back"
+    );
+}
+
+#[test]
 fn settling_an_unanswered_read_sends_the_price_back() {
     let mut c = published();
     let id = buy(&mut c);
@@ -1513,6 +1530,49 @@ fn an_answer_too_long_to_read_is_a_failure_not_a_panic() {
     assert_eq!(status(&c), RoundStatus::CloseFailed);
     assert_eq!(
         refunded_to(&accounts(1)),
+        0,
+        "OutLayer kept the fee for a run it made"
+    );
+}
+
+#[test]
+fn a_round_key_too_long_to_read_fails_the_round_and_keeps_the_fee() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    answered(
+        PromiseResult::Successful(vec![b' '; MAX_ENCLAVE_ANSWER + 1]),
+        101,
+    );
+    c.on_round_key(1, owner(), U128(DEPOSIT));
+    let r = c.get_round(U64(1)).unwrap();
+    assert_eq!(r.status, RoundStatus::Failed);
+    assert!(r.last_error.unwrap().contains("more than the"));
+    assert_eq!(
+        refunded_to(&owner()),
+        0,
+        "OutLayer kept the fee for a run it made"
+    );
+}
+
+#[test]
+fn an_audit_too_long_to_read_fails_and_keeps_the_fee() {
+    let mut c = with_open_round();
+    let f = funds()[1].clone();
+    name_auditor(&mut c, &f);
+    submit_from(&mut c, &f, 9);
+    close(&mut c);
+    testing_env!(ctx(&auditor(), READ, 1100));
+    let _ = c.request_audit(1, f, pubkey());
+    answered(
+        PromiseResult::Successful(vec![b' '; MAX_ENCLAVE_ANSWER + 1]),
+        1101,
+    );
+    c.on_audit(1, auditor(), U128(READ));
+    let a = c.get_audits_of(auditor()).pop().unwrap();
+    assert_eq!(a.status, AuditStatus::Failed);
+    assert_eq!(
+        refunded_to(&auditor()),
         0,
         "OutLayer kept the fee for a run it made"
     );

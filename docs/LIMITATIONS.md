@@ -45,15 +45,17 @@ What Nema does not do yet, or does only partly. Each item says why.
   fund removed before close: its mark was dropped, the round failed with 3 of 4,
   and the closer's deposit came back. Settling a stuck call, a bounced payment
   and a refused enclave call can't be caused on demand and have never happened
-  live; 118 contract tests cover them.
+  live; 121 contract tests cover them.
 - **Enclave quotes are checked, revocation is not.** The browser checks the chain
   to Intel's root and the measurements, not Intel's TCB status or revocation
   lists.
-- **Builds reproduce only on the author's setup.** The wasm embeds the Cargo
-  registry path, so the pinned hashes reproduce on Windows with
+- **The enclave build reproduces only on the author's setup.** Its wasm embeds the
+  Cargo registry path, so its pinned hash reproduces on Windows with
   `CARGO_HOME=C:\Users\USER\.cargo` and Rust 1.96 (CI does this), not on Linux or
   macOS. Remapping paths would fix it but changes the enclave hash, which needs a
-  new secret lock.
+  new secret lock. The contract does not have this problem: it is built in the
+  `sourcescan/cargo-near` container, reproduces on any host with Docker, and is
+  verified on SourceScan.
 - **The enclave source is frozen.** Any edit changes the hash the secret is locked
   to. So it is not formatted with `rustfmt`, and lint exceptions live in
   `Cargo.toml`.

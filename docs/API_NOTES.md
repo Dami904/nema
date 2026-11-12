@@ -129,6 +129,30 @@ Even a reformat moves line numbers in panic messages. The enclave source is
 frozen; lint exceptions go in `[lints]` in `aggregator/Cargo.toml`, which leaves
 the hash unchanged (checked).
 
+**The contract build reproduces on any host with Docker.**
+`cargo near build reproducible-wasm` (cargo-near 0.21.1) builds inside the
+`sourcescan/cargo-near:0.21.1-rust-1.96.0` image that `contract/Cargo.toml` pins
+by digest. The wasm records the commit it came from (NEP-330
+`contract_source_metadata`). SourceScan rebuilt `8475de8` and got the deployed
+sha256 `248f6ca6…d24a`. CI's `contract-reproduce` job runs the same build, and
+it fails if the contract source has moved on from that commit without a new deploy.
+
+## Contract callbacks (near-sdk 5.30.1)
+
+**A callback reads at most 256 KiB of the enclave's answer.**
+`env::promise_result_checked(0, MAX_ENCLAVE_ANSWER)` returns `TooLong` for a
+longer answer instead of loading it. Nema treats `TooLong` as a failed run whose
+fee OutLayer keeps, because the enclave did run. A read's price goes back to the
+buyer, a close or an audit can be asked again, and a round whose key came back
+too long fails (the owner opens a new one). Only `Failed` (the call itself
+failed) refunds the fee. Real answers are a few KB. The gas needed to parse an
+answer near the cap inside the 40 Tgas callback has not been measured (see
+THREAT_MODEL, known weaknesses).
+
+**A detached promise still runs.**
+In 5.30, dropping a `Promise` schedules it. `.detach()` only marks that the
+result is unused, so the refunds that call it are still sent.
+
 ## Attestations
 
 **The API is evidence, not a verdict.**

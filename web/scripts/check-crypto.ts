@@ -1,5 +1,5 @@
 // Checks the browser's hashes against the vectors the contract and enclave tests use.
-// Run with: npm test
+// Run with: pnpm test
 import { readFileSync } from "node:fs";
 import { PrivateKey, decrypt } from "eciesjs";
 import { base58ToHex, commitment, fromHex, setHash } from "../src/lib/hashes.ts";
