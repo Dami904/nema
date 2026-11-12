@@ -12,7 +12,10 @@ and is fixed, yet nobody can see it, not even the person who closed the round.**
       needs fund1's own wallet).
 - [ ] A terminal in `web/` with `pnpm install` done, and this command typed but not run:
       `pnpm live:check-attest --job 19364 --network testnet --contract nema-dev.testnet`
-- [ ] Sample mode works offline-from-chain: open `?demo=1` once so it is cached.
+- [ ] Sample mode works offline-from-chain: open `?demo=1` once so it is cached. Sample
+      has its own rounds (08 and 07 are published). The *Viewing as* menu resets to fund1
+      on every page load, so switch it again after each navigation.
+- [ ] Record in a full-width desktop window; a narrow window switches to the phone layout.
 - [ ] Screen recording of the full run as a fallback (see Contingencies).
 - [ ] Nothing gets pushed to `main` while recording: every push redeploys the site.
 
@@ -26,9 +29,9 @@ and is fixed, yet nobody can see it, not even the person who closed the round.**
 | 0:55 | Point at `count 4` and `commitment`, no mean | **The moment.** "The enclave published how many counted and a commitment. No mean, no spread, anywhere on chain." |
 | 1:15 | Scroll to the enclave runs, each ✓ | "Every run is checked here against Intel's quote: right hardware, right build hash, asked for by this contract." |
 | 1:35 | Terminal: run `check-attest` | "Same check from a terminal, including tampered copies that must fail." |
-| 1:55 | **Sample** → **Lender** → a published round, opened | "A lender pays 0.1 NEAR. The enclave seals the result to the lender's key alone, and the browser checks it against that commitment." |
-| 2:15 | **Vault** as fund1 | "That fee is split among the funds whose marks counted. Contributing pays." |
-| 2:30 | **Audit** as auditor | "A fund's auditor sees exactly what the fund sent, not a copy it could edit." |
+| 1:55 | **Sample** → **Rounds** → round 08 → **Result**, *Viewing as* **Applicant**, then **Lender** | Applicant: "This is what a lender sees before paying: the number is sealed." Lender: "After paying 0.1 NEAR the enclave seals the result to the lender's key alone, and the browser checks it against the commitment on chain." (Don't click Buy in Sample: it does nothing.) |
+| 2:15 | **Vault** (Sample opens it as fund1) | "That fee is split among the funds whose marks counted. Contributing pays." |
+| 2:30 | **Audit**, *Viewing as* **Auditor** | "A fund's auditor sees exactly what the fund sent, not a copy it could edit." |
 | 2:45 | Back to landing | "Funds seal. The enclave counts. NEAR keeps the receipts." |
 
 ## Contingencies
