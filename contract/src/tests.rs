@@ -1,6 +1,7 @@
 use super::*;
 use near_sdk::test_utils::{accounts, VMContextBuilder};
 use near_sdk::testing_env;
+use near_sdk::PromiseResult;
 
 const NS: u64 = 1_000_000_000;
 const DEPOSIT: u128 = MIN_OUTLAYER_DEPOSIT;
@@ -1488,6 +1489,24 @@ fn an_answer_that_is_not_json_is_a_failure_not_a_panic() {
     close(&mut c);
     answered(
         PromiseResult::Successful(b"<html>502</html>".to_vec()),
+        1002,
+    );
+    c.on_tally(1, accounts(1), U128(DEPOSIT), U64(1001 * NS));
+    assert_eq!(status(&c), RoundStatus::CloseFailed);
+    assert_eq!(
+        refunded_to(&accounts(1)),
+        0,
+        "OutLayer kept the fee for a run it made"
+    );
+}
+
+#[test]
+fn an_answer_too_long_to_read_is_a_failure_not_a_panic() {
+    let mut c = with_open_round();
+    submit_all(&mut c);
+    close(&mut c);
+    answered(
+        PromiseResult::Successful(vec![b' '; MAX_ENCLAVE_ANSWER + 1]),
         1002,
     );
     c.on_tally(1, accounts(1), U128(DEPOSIT), U64(1001 * NS));

@@ -2,17 +2,18 @@
 name = "nema-contract"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/Dami904/nema"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "=5.17.2"
+near-sdk = "=5.30.1"
 serde_json = "1"
 hex = "0.4"
 
 [dev-dependencies]
-near-sdk = { version = "=5.17.2", features = ["unit-testing"] }
+near-sdk = { version = "=5.30.1", features = ["unit-testing"] }
 
 [profile.release]
 codegen-units = 1
@@ -26,3 +27,13 @@ overflow-checks = true
 # `new` takes the deployment settings one by one; #[near] wraps it in generated
 # code an inline allow does not reach.
 too_many_arguments = "allow"
+
+# What `contract_source_metadata` reports, so a verifier such as SourceScan can
+# rebuild this exact source in the same container and compare the result with the
+# deployed code. near-sdk 5.30 declares the NEAR protocol it needs (85), which is
+# what lets cargo-near accept Rust newer than 1.86.
+[package.metadata.near.reproducible_build]
+image = "sourcescan/cargo-near:0.21.1-rust-1.96.0"
+image_digest = "sha256:ccb22bb4e677ed022d8b9d1aa1b32f0af52dd0471ef1c32e48dedbf68ee6ee17"
+passed_env = []
+container_build_command = ["cargo", "near", "build", "non-reproducible-wasm", "--locked"]

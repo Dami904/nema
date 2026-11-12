@@ -41,7 +41,7 @@ use near_sdk::json_types::{U128, U64};
 use near_sdk::store::{IterableMap, IterableSet, LookupMap};
 use near_sdk::{
     env, ext_contract, log, near, require, AccountId, BorshStorageKey, Gas, NearToken,
-    PanicOnDefault, Promise, PromiseError, PromiseOrValue, PromiseResult,
+    PanicOnDefault, Promise, PromiseError, PromiseOrValue,
 };
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -1175,7 +1175,7 @@ impl Nema {
     fn request_enclave(&self, input: Value, deposit: u128, payer: &AccountId) -> (Promise, u128) {
         let fee = deposit.min(MAX_OUTLAYER_DEPOSIT);
         if deposit > fee {
-            Self::pay(payer.clone(), deposit - fee);
+            Self::pay(payer.clone(), deposit - fee).detach();
         }
         let source = json!({"Project": {"project_id": self.project_id, "version_key": null}});
         let limits = json!({
@@ -1467,7 +1467,7 @@ impl Nema {
                 p.status = PurchaseStatus::Refunded;
                 p.error = Some(clip(reason));
                 if purchase.price.0 > 0 {
-                    Self::pay(purchase.buyer.clone(), purchase.price.0);
+                    Self::pay(purchase.buyer.clone(), purchase.price.0).detach();
                 }
                 emit(
                     "read_refunded",
@@ -1614,24 +1614,31 @@ fn clip(mut s: String) -> String {
     s
 }
 
+/// The longest enclave answer the callback reads. A tally, a sealed read or an
+/// audit is a few kilobytes; reading more would only spend the callback's gas.
+pub const MAX_ENCLAVE_ANSWER: usize = 256 * 1024;
+
 /// The enclave's answer to the call this callback follows. If OutLayer refused the
 /// call itself, NEAR returned its fee here, so it goes back to the payer. Bytes that
-/// are not JSON are a failure, not a panic.
+/// are not JSON, or more of them than the callback reads, are a failure, not a panic.
 fn enclave_answer(payer: AccountId, fee: U128) -> Result<Value, String> {
-    match env::promise_result(0) {
-        PromiseResult::Successful(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+    match env::promise_result_checked(0, MAX_ENCLAVE_ANSWER) {
+        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
             Ok(v) => outcome(Ok(v)),
             Err(_) => Err("the enclave returned something that is not JSON".into()),
         },
-        PromiseResult::Failed => {
+        Err(PromiseError::TooLong(n)) => Err(format!(
+            "the enclave returned {n} bytes, more than the {MAX_ENCLAVE_ANSWER} the contract reads"
+        )),
+        Err(e) => {
             if fee.0 > 0 {
-                Nema::pay(payer.clone(), fee.0);
+                Nema::pay(payer.clone(), fee.0).detach();
                 emit(
                     "enclave_fee_refunded",
                     json!({"account": payer, "amount": fee}),
                 );
             }
-            outcome(Err(PromiseError::Failed))
+            outcome(Err(e))
         }
     }
 }
