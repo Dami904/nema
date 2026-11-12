@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "test": "tsx scripts/check-crypto.ts",
     "live:smoke": "tsx scripts/smoke.ts",
+    "live:demo-round": "tsx scripts/demo-round.ts",
     "live:close-rounds": "tsx scripts/close-rounds.ts",
     "live:check-attest": "tsx scripts/check-attest.ts",
     "live:enclave-source": "tsx scripts/enclave-source.ts",
