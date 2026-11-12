@@ -62,6 +62,69 @@ export function demoStore(): Promise<Store> {
   return store;
 }
 
+/** How long the sample enclave takes to seal a copy, so the wait is visible. */
+const SAMPLE_SEAL_MS = 2500;
+
+/**
+ * Plays a call against the sample data in this tab, so the flow can be seen
+ * without a wallet. Nothing is sent anywhere, and a reload starts over.
+ * Resolves true when the call was simulated, false when the sample contract
+ * would refuse it, and null for calls sample mode doesn't play.
+ */
+export async function simulate(method: string, args: Record<string, unknown>, account: string, changed: () => void): Promise<boolean | null> {
+  const s = await demoStore();
+  const round = s.rounds.find((r) => r.id === String(args.round_id));
+  if (!round) return null;
+
+  if (method === "buy_read" || method === "claim_read") {
+    if (round.status !== "Published" || !round.listing) return false;
+    const held = s.purchases.some((p) => p.round_id === round.id && p.buyer === account && p.status !== "Refunded");
+    if (held) return true;
+    const contributors = round.listing.contributors;
+    const free = contributors.includes(account) ? "Contributed" : contributors.some((c) => s.auditors[c] === account) ? "Audit" : null;
+    if (method === "claim_read" && !free) return false;
+    const price = method === "buy_read" ? BigInt(s.config.read_price) : 0n;
+    const purchase: Purchase = {
+      id: String(Math.max(0, ...s.purchases.map((p) => Number(p.id))) + 1),
+      round_id: round.id,
+      buyer: account,
+      buyer_pubkey: "03" + "55".repeat(32),
+      price: price.toString(),
+      basis: method === "buy_read" ? "Purchased" : free!,
+      status: "Pending",
+      sealed: null,
+      error: null,
+    };
+    s.purchases.push(purchase);
+    changed();
+    setTimeout(() => {
+      purchase.status = "Delivered";
+      purchase.sealed = "04" + "7c".repeat(150);
+      // The read price is shared equally among the funds whose marks counted.
+      if (price > 0n) {
+        const share = price / BigInt(contributors.length);
+        for (const c of contributors) s.earnings[c] = (BigInt(s.earnings[c] ?? "0") + share).toString();
+      }
+      changed();
+    }, SAMPLE_SEAL_MS);
+    return true;
+  }
+
+  if (method === "submit") {
+    if (round.status !== "Open" || !s.members.includes(account)) return false;
+    const list = (s.submissions[round.id] ??= []).filter((x) => x.account !== account);
+    list.push({ account, ciphertext_hex: fakeCipher(round.id + account + Date.now()), submitted_at: ns(Date.now()) });
+    s.submissions[round.id] = list;
+    round.submitted = list.map((x) => x.account);
+    round.set_hash = await setHash(list);
+    if (typeof args.mark === "number") DEMO_OWN_MARKS[round.id] = args.mark;
+    changed();
+    return true;
+  }
+
+  return null;
+}
+
 async function build(): Promise<Store> {
   const now = Date.now();
   const subs = (id: string, accounts: string[], at: number): Submission[] =>

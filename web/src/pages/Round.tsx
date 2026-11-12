@@ -184,7 +184,10 @@ function FundView({ round, isMember }: { round: RoundT; isMember: boolean }) {
     if (Math.abs(hundredths - v * 100) > 1e-6) return setErr("Use at most two decimals.");
     if (!round.pubkey) return setErr("This round has no key yet.");
     setErr(null);
-    if (demoMode) return act({ method: "submit", args: {}, label: "Your mark" });
+    if (demoMode) {
+      if (await act({ method: "submit", args: { round_id: round.id, mark: hundredths }, label: "Your sealed mark" })) setMark("");
+      return;
+    }
     setBusy(true);
     const ciphertext_hex = sealMark(round.pubkey, accountId, hundredths);
     const ok = await act({ method: "submit", args: { round_id: Number(round.id), ciphertext_hex }, deposit: SUBMIT_DEPOSIT_YOCTO, label: "Your sealed mark" });
@@ -254,7 +257,10 @@ function LenderView({ round }: { round: RoundT }) {
     if (!accountId) return signIn();
     const method = free ? "claim_read" : "buy_read";
     const label = free ? "Opening your free copy" : "Buying a read";
-    if (demoMode) return act({ method, args: {}, label });
+    if (demoMode) {
+      if (await act({ method, args: { round_id: round.id }, label })) setJustBought(true);
+      return;
+    }
     let pk: string;
     try {
       pk = ensureBuyerKey(accountId).pk;

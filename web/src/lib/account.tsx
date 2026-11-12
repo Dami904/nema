@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { useToast } from "../components/Toaster";
 import { useChain } from "./chain";
 import { CONFIG } from "./config";
-import { DEMO_AUDITOR, DEMO_LENDER } from "./demo";
+import { DEMO_AUDITOR, DEMO_LENDER, simulate } from "./demo";
 import { useWallet, type Call } from "./wallet";
 
 export const DEMO_PERSONAS = [
@@ -18,7 +18,7 @@ type Account = {
   /** The signed-in wallet account, or the demo persona. Null when nobody is signed in. */
   accountId: string | null;
   setDemoAccount(id: string): void;
-  /** Sends a contract call, or in demo mode explains that nothing was sent. Resolves true on success. */
+  /** Sends a contract call. In demo mode it plays the call on the sample data, or explains that nothing was sent. Resolves true on success. */
   act(c: Call): Promise<boolean>;
 };
 
@@ -33,8 +33,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   const act = async (c: Call) => {
     if (demoMode) {
-      toast("info", "Sample data: nothing was sent", "Switch to live data and sign in to do this for real.");
-      return false;
+      const played = await simulate(c.method, c.args, demoAccount, refresh);
+      if (played === null) {
+        toast("info", "Sample data: nothing was sent", "Switch to live data and sign in to do this for real.");
+        return false;
+      }
+      if (played) toast("ok", `${c.label} (sample)`, "Played on sample data in this tab. Nothing was sent to the chain.");
+      else toast("bad", `${c.label} wasn't possible`, "The contract would refuse this for the account you're viewing as.");
+      return played;
     }
     const ok = await wallet.call(c);
     if (ok) refresh();
