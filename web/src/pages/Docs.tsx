@@ -330,6 +330,11 @@ function Verify() {
         NEAR reports the sha256 of every contract's code. Compare it with the build we publish (this page also checks it live, in the “Live from chain” panel).
       </p>
       <Copy text={BUILDS.contractWasmSha256}>{short(BUILDS.contractWasmSha256, 12)}</Copy>
+      <p className="muted">
+        That build is reproducible. The contract names the commit and the build container it came from (its <code>contract_source_metadata</code>, NEP-330),
+        and SourceScan rebuilt commit <code>{BUILDS.contractSourceRev.slice(0, 7)}</code> in that container and got the same code:{" "}
+        <a href={`${CONFIG.explorerAccount}${CONFIG.contract}?tab=contract`} target="_blank" rel="noreferrer">verified on NearBlocks ↗</a>
+      </p>
       <h3>The enclave tallied what was submitted</h3>
       <p className="muted">
         At the deadline the contract fixes a set hash over the submissions. Every round's Verify view recomputes it in your browser from the
