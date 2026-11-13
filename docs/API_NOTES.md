@@ -144,7 +144,8 @@ the hash unchanged (checked).
 `sourcescan/cargo-near:0.21.1-rust-1.96.0` image that `contract/Cargo.toml` pins
 by digest. The wasm records the commit it came from (NEP-330
 `contract_source_metadata`). SourceScan rebuilt `8475de8` and got the deployed
-sha256 `248f6ca6…d24a`. CI's `contract-reproduce` job runs the same build, and
+sha256 `248f6ca6…d24a` (v1), and rebuilt `d8f5b58` and got v2.1's `36e01373…`
+(code hash `4hDBzqaW…tfUUj` on `nema-v2.testnet`). CI's `contract-reproduce` job runs the same build, and
 it fails if the contract source has moved on from that commit without a new deploy.
 
 ## Contract callbacks (near-sdk 5.30.1)

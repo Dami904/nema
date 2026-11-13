@@ -28,8 +28,9 @@ goes bad, and what it does not defend against at all.
 
 ### The contract account's full-access key
 
-This is the most dangerous key in the system. The account is the contract, and
-`nema-dev.testnet` also owns the OutLayer secret. The council governs the
+This is the most dangerous key in the system. The account is the contract
+(`nema-v2.testnet`; v1 is `nema-dev.testnet`), and `nema-dev.testnet` also owns
+the OutLayer secret. The council governs the
 contract's state, but cannot stop whoever holds this key from replacing the code.
 
 - **Deploy different contract code.** The enclave trusts the contract *account*,
@@ -94,7 +95,7 @@ and old rounds stay readable by whoever holds the old one.
 
 ## Not defended, explicitly
 
-- **A compromised `nema-dev.testnet` key** while it still has full access. See above.
+- **A compromised contract account key** (`nema-v2.testnet`, or `nema-dev.testnet`, which also owns the secret) while it still has full access. See above.
 - **A broken TEE.** Privacy rests on one hardware vendor and one operator, not
   on a threshold of independent nodes.
 - **Readers sharing the result.** Nema controls who can open it, not what they

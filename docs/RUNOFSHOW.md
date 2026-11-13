@@ -5,13 +5,12 @@ and is fixed, yet nobody can see it, not even the person who closed the round.**
 
 ## Before going live
 
-- [ ] [nema-near.vercel.app](https://nema-near.vercel.app) loads, **Live** shows round 04 as Published.
-- [ ] A second tab on round 04 → **Verify**, already scrolled to the enclave runs. Open it
-      a minute early: the three runs take up to 30 seconds to check, then show
-      Round key ✓ 6 of 6, Tally ✓ 6 of 6, and fund1's sealed copy ✓ 5 of 6 (the sixth
-      needs fund1's own wallet).
+- [ ] [nema-near.vercel.app](https://nema-near.vercel.app) loads, **Live** shows round 03 as Published.
+- [ ] A second tab on round 03 → **Verify**, already scrolled to the enclave runs. Open it
+      a minute early: the runs take up to 30 seconds to check, then each shows ✓ (a
+      sealed copy's last check needs that reader's own wallet).
 - [ ] A terminal in `web/` with `pnpm install` done, and this command typed but not run:
-      `pnpm live:check-attest --job 19364 --network testnet --contract nema-dev.testnet`
+      `pnpm live:check-attest --job 89480 --network testnet --contract nema-v2.testnet`
 - [ ] Sample mode works offline-from-chain: open `?demo=1` once so it is cached. Sample
       has its own rounds (08 and 07 are published). Buying and submitting play out on the
       sample data in that tab (nothing is sent), and a reload starts over, so rehearse
@@ -26,13 +25,13 @@ and is fixed, yet nobody can see it, not even the person who closed the round.**
 | Time | Do | Say |
 | --- | --- | --- |
 | 0:00 | Landing page | "Private loans rarely trade, so every fund marks its own. Lenders taking them as collateral have to trust one number. Funds would compare, if it didn't mean showing their book." |
-| 0:20 | **Rounds** → round 04 | "Four funds priced this loan. Each mark was sealed in the browser to a key only an enclave holds." |
+| 0:20 | **Rounds** → round 03 | "Four funds priced this loan. Each mark was sealed in the browser to a key only an enclave holds." |
 | 0:35 | **Verify** tab: set hash on chain vs recomputed | "The chain stores ciphertext and commits to the exact set at the deadline. My browser recomputes it: same hash." |
 | 0:55 | Point at `count 4` and `commitment`, no mean | **The moment.** "The enclave published how many counted and a commitment. No mean, no spread, anywhere on chain." |
 | 1:15 | Scroll to the enclave runs, each ✓ | "Every run is checked here against Intel's quote: right hardware, right build hash, asked for by this contract." |
 | 1:35 | Terminal: run `check-attest` | "Same check from a terminal, including tampered copies that must fail." |
 | 1:55 | **Sample** → *Viewing as* **Applicant** → **Rounds** → round 08 → **Result** → **Buy a read** | "A lender sees the number sealed. It pays 0.1 NEAR, the enclave seals the result to its key alone…" (it unseals after about 2 seconds) "…and the browser checks it against the commitment on chain." |
-| 2:15 | **Vault**, *Viewing as* **Fund · fund1**: earnings went up by 0.025 | "That fee is split among the funds whose marks counted. Contributing pays." |
+| 2:15 | **Vault**, *Viewing as* **Fund · fund1**: earnings went up by its share | "That fee goes to the funds whose marks counted, with 5% to the council. Contributing pays." |
 | 2:30 | **Audit**, *Viewing as* **Auditor** | "A fund's auditor sees exactly what the fund sent, not a copy it could edit." |
 | 2:45 | Back to landing | "Funds seal. The enclave counts. NEAR keeps the receipts." |
 

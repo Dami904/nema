@@ -123,7 +123,7 @@ ECIES: secp256k1, uncompressed ephemeral key, HKDF-SHA256, AES-256-GCM with a
 - `migrate` upgrades the first deployment's state in place. It refuses if any
   purchase exists, because the purchase layout gained a `basis` field.
 - The enclave trusts the contract's account, not its code. While
-  `nema-dev.testnet` holds a full-access key, whoever has that key could deploy
+  the contract account (`nema-v2.testnet`; v1: `nema-dev.testnet`) holds a full-access key, whoever has that key could deploy
   different code and have the enclave tally a hand-picked set, which could
   expose marks. The site shows the deployed code hash so a change is visible;
   removing the account's full-access key after the final deploy closes this.
