@@ -51,7 +51,10 @@ async function checkJob(job: Job, round: Round, mine: Mine): Promise<Run | null>
   const att: Attestation = await attestationOf(job.job_id);
   const v = await verifyRun(att, expectFor(round.id));
   const input = v.input;
-  if (!input || String(input.round_id) !== round.id) return null;
+  // Round numbers restart on each contract, and the same accounts sign for more than
+  // one (v1's round 6 and v2's round 6 were both opened by nema-dev.testnet), so a run
+  // belongs here only if it was asked for on this contract's round.
+  if (!input || String(input.round_id) !== round.id || input.contract !== CONFIG.contract) return null;
   const kind = input.action as RunKind;
   if (!(kind in KIND_LABEL)) return null;
   const out = (v.output ?? null) as Record<string, unknown> | null;
