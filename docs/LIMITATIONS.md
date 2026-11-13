@@ -45,7 +45,7 @@ What Nema does not do yet, or does only partly. Each item says why.
   fund removed before close: its mark was dropped, the round failed with 3 of 4,
   and the closer's deposit came back. Settling a stuck call, a bounced payment
   and a refused enclave call can't be caused on demand and have never happened
-  live; 224 contract tests cover them.
+  live; 228 contract tests cover them.
 - **Enclave quotes are checked, revocation is not.** The browser checks the chain
   to Intel's root and the measurements, not Intel's TCB status or revocation
   lists.
@@ -56,6 +56,14 @@ What Nema does not do yet, or does only partly. Each item says why.
   over a panel that barely changes still narrow things down. It is not a formal
   guarantee like differential privacy, which would need far more noise than a
   four-fund mean can carry (see [ROADMAP.md](ROADMAP.md)).
+- **The reader allowlist limits who buys, not who sees.** With reads limited, only
+  approved readers can pay for a copy. Funds whose mark counted still read free, and
+  so does any account a fund names as its auditor before the deadline, so a fund
+  could name an unvetted account; and anyone can pass a result on. A council
+  replaced by a takeover leaves the reader list and the switch as they were; the new
+  council has to change them by vote. A reader removed while a paid read is already
+  with the enclave still receives that copy (the result is sealed before the
+  callback runs).
 - **Enclave builds before v2.1 reproduced only on the author's setup.** The
   earlier build (`3ed58517…`) embeds a Windows Cargo path. The current one is built
   in a digest-pinned Linux container (`aggregator/build.sh`), so its hash

@@ -31,7 +31,11 @@ export const KIND_LABEL: Record<RunKind, string> = {
 
 type Mine = { purchases: Purchase[]; audits: AuditCopy[] };
 
-const expect = { contract: CONFIG.contract, project: BUILDS.enclaveProject, wasmSha256: BUILDS.enclaveWasmSha256, earlierWasm: BUILDS.earlierEnclaveWasmSha256 };
+const expect = { contract: CONFIG.contract, project: BUILDS.enclaveProject, wasmSha256: BUILDS.enclaveWasmSha256 };
+
+/** What a run on this round must be: the current build, or an earlier one for rounds it ran. */
+export const expectFor = (roundId: string) =>
+  Number(roundId) <= BUILDS.earlierEnclaveLastRound ? { ...expect, earlierWasm: BUILDS.earlierEnclaveWasmSha256 } : expect;
 
 export async function runsForRound(round: Round, accounts: string[], mine: Mine): Promise<Run[]> {
   const jobs = new Map<number, Job>();
@@ -45,7 +49,7 @@ export async function runsForRound(round: Round, accounts: string[], mine: Mine)
 
 async function checkJob(job: Job, round: Round, mine: Mine): Promise<Run | null> {
   const att: Attestation = await attestationOf(job.job_id);
-  const v = await verifyRun(att, expect);
+  const v = await verifyRun(att, expectFor(round.id));
   const input = v.input;
   if (!input || String(input.round_id) !== round.id) return null;
   const kind = input.action as RunKind;

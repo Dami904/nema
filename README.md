@@ -9,7 +9,7 @@
 Sealed marks in. One consensus out. Nobody sees a single price.
 
 [![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-276%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![Tests](https://img.shields.io/badge/tests-280%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
@@ -92,7 +92,7 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **276** | automated tests passing: 224 contract, 42 enclave, 10 browser crypto assertions          |
+| **280** | automated tests passing: 228 contract, 42 enclave, 10 browser crypto assertions in 7 checks          |
 | **74**  | safety guards, each removed in turn to confirm a test fails without it: 19 in v1, 43 added by the v2 council, 12 by v2.1's rounding and reader allowlist ([CLAIMS.md](docs/CLAIMS.md)) |
 | **20**  | checks in the live smoke test: all passing on v2.1 round 3 (rounded, trimmed result; the council's pay); 20 of 20 on v1 round 6 |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
@@ -242,8 +242,8 @@ flowchart TD
 
 | Path | Role |
 | --- | --- |
-| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 224 tests |
-| [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 32 tests |
+| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 228 tests |
+| [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 42 tests |
 | [`web/`](web) | The app (React, Vite): seven pages, sample data for every state, wallet sign-in |
 | [`web/scripts/`](web/scripts) | `smoke.ts` (one full live round), `close-rounds.ts`, `check-attest.ts`, `check-crypto.ts` (the `pnpm test` vectors), `cli.ts` (shared NEAR CLI wrapper) |
 | [`interop/`](interop) | Browser encryption (eciesjs) against the enclave, both directions; a manual tool that regenerates the shared vectors, which the three test suites then check |
@@ -342,7 +342,7 @@ if set_hash != expected_set_hash {
 
 - **The secret is locked twice.** OutLayer releases the master secret only to Nema's exact build (`WasmHash`) requested through Nema's contract (`Predecessor`). A rebuild, or the same build called by anyone else, gets nothing.
 - **A copied ciphertext is rejected.** Each fund encrypts its own account next to its mark, so replaying another fund's ciphertext gets it dropped and named.
-- **Integer arithmetic only**: marks in hundredths, mean to 0.01, spread to 0.0001, with an exact integer square root. The browser checks every opened copy against the commitment.
+- **Integer arithmetic only**: marks in hundredths; a trimmed mean rounded to an eighth of a point and a spread rounded to a quarter (rounds before v2.1: mean to 0.01, spread to 0.0001), with an exact integer square root. The browser checks every opened copy against the commitment.
 - **The callbacks never panic.** A failed enclave call, or an answer that isn't even JSON, is recorded on the round or the read and can be retried or refunded; one that never answers is settled after 30 minutes. Nothing strands state.
 - **No payment is lost.** Bonds, refunds and withdrawals that bounce (say the account was deleted) are kept as the account's earnings, and an enclave fee OutLayer refuses goes back to whoever paid it.
 - **A retry never pays twice.** A second read for the same round and key is refused while the first is delivered or on its way.
@@ -352,8 +352,8 @@ if set_hash != expected_set_hash {
 
 ## Tested, not claimed
 
-**276 automated tests pass**: 224 contract (`cargo test` in `contract/`), 42 enclave
-(`cargo test` in `aggregator/`) and 10 browser crypto checks (`pnpm test`). CI runs
+**280 automated tests pass**: 228 contract (`cargo test` in `contract/`), 42 enclave
+(`cargo test` in `aggregator/`) and 10 browser crypto assertions in 7 checks (`pnpm test`). CI runs
 them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
 rebuild of both wasm files against their pinned hashes, and a scan for committed
 secrets. On top, the live smoke test runs 20 checks on testnet and the attestation

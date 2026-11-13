@@ -163,7 +163,8 @@ function Readers({ config, isCouncil, onPropose }: { config: Config; isCouncil: 
         {config.readers_only
           ? "Paid reads are limited to the readers below, approved by the council."
           : "Anyone can pay to read a published round. The council can limit reads to readers it approves, such as vetted lenders."}{" "}
-        Funds whose mark counted, and their auditors, always read their own rounds free.
+        Funds whose mark counted, and the auditors they name, always read their own rounds free. A fund can name any account as its
+        auditor, and anyone can pass a result on, so this vets who buys, not everyone who ever sees a result.
       </p>
       {readers.length > 0 && (
         <ul className="members" style={{ marginTop: 12 }}>

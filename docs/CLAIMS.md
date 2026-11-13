@@ -1,7 +1,7 @@
 # What is enforced, and where
 
 Each claim below names the tests that fail if it stops being true. Contract tests
-are in [`contract/src/tests.rs`](../contract/src/tests.rs) (224),
+are in [`contract/src/tests.rs`](../contract/src/tests.rs) (228),
 enclave tests in [`aggregator/src/tests.rs`](../aggregator/src/tests.rs), and the
 live checks in [`web/scripts/`](../web/scripts). Run them with `cd contract && cargo
 test`, `cargo test -p nema-aggregator` and `pnpm --dir web test`.
@@ -27,7 +27,10 @@ result and the reader allowlist.
 | **v2.1** One wild mark can't drag the mean, from five funds up | enclave `one_wild_mark_cannot_drag_the_rounded_mean`, `trimming_drops_one_from_each_end_from_five_funds` |
 | **v2.1** A round committed before rounding is still delivered as it was committed | enclave `a_round_committed_before_rounding_is_delivered_as_committed` |
 | **v2.1** If the council limits reads, only approved readers can buy; counted funds and their auditors still read free | `a_limited_panel_refuses_an_unapproved_buyer`, `an_approved_reader_can_buy_on_a_limited_panel`, `a_removed_reader_can_no_longer_buy`, `a_contributing_fund_still_reads_free_on_a_limited_panel`, `reads_are_open_to_anyone_by_default` |
-| **v2.1** Reader changes need a council majority, and stored proposals stay readable | `one_council_member_cannot_limit_reads_alone`, `a_stale_reader_proposal_fails_cleanly`, `reader_proposals_keep_older_proposals_readable` |
+| **v2.1** Reader changes need a council majority, and stored proposals stay readable | `one_council_member_cannot_limit_reads_alone`, `a_stale_reader_proposal_fails_cleanly`, `a_stale_remove_reader_fails_cleanly`, `reader_proposals_keep_older_proposals_readable` (all 11 kinds keep their tag) |
+| **v2.1** The reader list lives beside the rest of the state without touching it | `the_reader_keys_are_their_own`, `readers_live_beside_a_full_round` |
+| **v2.1** Free copies stay free on a limited panel, for counted funds and their auditors | `a_contributing_fund_still_reads_free_on_a_limited_panel`, `an_auditor_still_reads_free_on_a_limited_panel` |
+| **v2.1** The site accepts the earlier enclave only for the rounds it ran | `earlierEnclaveLastRound` in `web/src/lib/config.ts`, used by `expectFor` in `web/src/lib/proof.ts` (not unit-tested) |
 | A fund removed before the close doesn't count | `a_fund_removed_before_the_close_does_not_count`, `removing_enough_funds_fails_the_round_at_close` |
 
 ## Money

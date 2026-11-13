@@ -8,7 +8,7 @@ import { useToast } from "../components/Toaster";
 import { useAccount } from "../lib/account";
 import { useChain, useLoad, useNow } from "../lib/chain";
 import { splitRead } from "../lib/split";
-import { CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, STORAGE_DEPOSIT_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../lib/config";
+import { BUILDS, CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, STORAGE_DEPOSIT_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../lib/config";
 import { date, handle, near, nsToMs, short } from "../lib/format";
 import { commitment, setHash, sha256Hex } from "../lib/hashes";
 import { downloadBackup, ensureBuyerKey, getBuyerKey, keepMark, restoreBackup, sealMark } from "../lib/keys";
@@ -341,7 +341,7 @@ function LenderView({ round }: { round: RoundT }) {
                 <dt>Storage, kept by the contract</dt><dd>{near(STORAGE_DEPOSIT_YOCTO)}</dd>
               </Fees>
               {barred ? (
-                <p className="note">This panel sells reads only to readers its council approved. A council member can propose your account on the Panel page.</p>
+                <p className="note">This panel sells paid reads only to readers its council approved. A council member can propose your account on the Panel page.</p>
               ) : (
                 <>
                   <button className="btn wide" onClick={buy} disabled={busy} aria-disabled={busy}>
@@ -457,7 +457,7 @@ function OpenedResult({ round, opened, byRound }: { round: RoundT; opened: Opene
         <span className="serif mean">{opened.mean}</span>
         <span className="serif spread">± {spread.toFixed(2)}</span>
       </div>
-      <p className="muted" style={{ fontSize: 13 }}>{methodNote(opened)}</p>
+      <p className="muted" style={{ fontSize: 13 }}>{methodNote(opened, round.id)}</p>
       <Gauge mean={mean} spread={spread} own={ownPrice} />
       {z !== undefined && (
         <div className="stand">
@@ -480,7 +480,9 @@ function OpenedResult({ round, opened, byRound }: { round: RoundT; opened: Opene
 }
 
 /** How the enclave turned the marks into this result. */
-function methodNote(opened: Opened): string {
+function methodNote(opened: Opened, roundId: string): string {
+  if (opened.method === "exact" && Number(roundId) > BUILDS.earlierEnclaveLastRound)
+    return "Warning: this round was tallied exactly, by an enclave build that should no longer run. Its result is not rounded.";
   if (opened.method !== "rounded") return `Mean and one standard deviation, in points of par, from ${opened.count} funds.`;
   const trim = Math.floor((opened.count - 1) / 4);
   const mean = trim > 0 ? `The mean of the middle ${opened.count - 2 * trim} of ${opened.count} marks (the ${trim === 1 ? "highest and lowest are" : `${trim} highest and ${trim} lowest are`} left out)` : `The mean of all ${opened.count} marks`;

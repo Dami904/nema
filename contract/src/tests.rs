@@ -3151,11 +3151,77 @@ fn a_stale_reader_proposal_fails_cleanly() {
 
 #[test]
 fn reader_proposals_keep_older_proposals_readable() {
-    // New kinds were appended: every existing kind keeps its borsh tag.
+    // New kinds were appended: every existing kind keeps its borsh tag, so
+    // proposals stored before the redeploy still read.
     let tag = |k: ProposalKind| near_sdk::borsh::to_vec(&k).unwrap()[0];
-    assert_eq!(tag(ProposalKind::SetReadPrice(U128(0))), 0);
-    assert_eq!(tag(ProposalKind::RemoveLoan(U64(0))), 6);
-    assert_eq!(tag(ProposalKind::Heartbeat), 7);
-    assert_eq!(tag(ProposalKind::AddReader(buyer())), 8);
-    assert_eq!(tag(ProposalKind::SetReadersOnly(true)), 10);
+    let kinds = [
+        ProposalKind::SetReadPrice(U128(0)),
+        ProposalKind::RemoveMember(buyer()),
+        ProposalKind::AddCouncil(buyer()),
+        ProposalKind::RemoveCouncil(buyer()),
+        ProposalKind::SetThreshold(2),
+        ProposalKind::RegisterLoan("x".into()),
+        ProposalKind::RemoveLoan(U64(0)),
+        ProposalKind::Heartbeat,
+        ProposalKind::AddReader(buyer()),
+        ProposalKind::RemoveReader(buyer()),
+        ProposalKind::SetReadersOnly(true),
+    ];
+    for (i, k) in kinds.into_iter().enumerate() {
+        assert_eq!(tag(k.clone()), i as u8, "{k:?}");
+    }
+}
+
+#[test]
+fn the_reader_keys_are_their_own() {
+    // One byte each, after every collection prefix, so they can't collide with a
+    // collection's keys (each is its prefix plus at least one more byte).
+    assert_eq!(StorageKey::Readers.into_storage_key(), vec![13]);
+    assert_eq!(StorageKey::ReadersOnly.into_storage_key(), vec![14]);
+    assert_eq!(StorageKey::LatestRound.into_storage_key(), vec![12]);
+}
+
+#[test]
+fn readers_live_beside_a_full_round() {
+    let mut c = published();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    council_passes(&mut c, ProposalKind::AddReader(buyer()), 1060);
+    let id = buy(&mut c);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Delivered);
+    assert_eq!(c.get_rounds(None, None).len(), 1);
+    assert_eq!(config_readers(&c), (true, vec![buyer().to_string()]));
+}
+
+#[test]
+fn an_auditor_still_reads_free_on_a_limited_panel() {
+    let mut c = with_open_round();
+    name_auditor(&mut c, &funds()[2]);
+    submit_all(&mut c);
+    close(&mut c);
+    let h = set_hash(&c);
+    c.apply_tally(1, Ok(good_tally(&h)));
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    testing_env!(ctx(&auditor(), READ, 1100));
+    let _ = c.claim_read(1, pubkey());
+    assert_eq!(c.get_purchases_of(auditor())[0].basis, Basis::Audit);
+}
+
+#[test]
+fn a_stale_remove_reader_fails_cleanly() {
+    let mut c = fresh();
+    council_passes(&mut c, ProposalKind::AddReader(buyer()), 100);
+    let first = {
+        testing_env!(ctx(&owner(), 0, 110));
+        c.propose(ProposalKind::RemoveReader(buyer()))
+    };
+    let second = {
+        testing_env!(ctx(&council2(), 0, 111));
+        c.propose(ProposalKind::RemoveReader(buyer()))
+    };
+    as_member(&mut c, &council3(), 112, |c| c.vote(first));
+    as_member(&mut c, &council3(), 113, |c| c.vote(second));
+    assert!(config_readers(&c).1.is_empty());
+    assert!(c.get_proposals().is_empty());
 }
