@@ -40,8 +40,8 @@
 use near_sdk::json_types::{U128, U64};
 use near_sdk::store::{IterableMap, IterableSet, LookupMap};
 use near_sdk::{
-    env, ext_contract, log, near, require, AccountId, BorshStorageKey, Gas, NearToken,
-    PanicOnDefault, Promise, PromiseError, PromiseOrValue,
+    borsh, env, ext_contract, log, near, require, AccountId, BorshStorageKey, Gas, IntoStorageKey,
+    NearToken, PanicOnDefault, Promise, PromiseError, PromiseOrValue,
 };
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -74,6 +74,8 @@ const MAX_ROUND_NS: u64 = 30 * 24 * 3600 * 1_000_000_000;
 /// How many open proposals one council member may have at a time, so one seat
 /// can't fill storage or make `propose` too costly to run.
 const MAX_OPEN_PROPOSALS_PER_MEMBER: usize = 4;
+/// The most accounts the council can approve as readers.
+const MAX_READERS: usize = 128;
 const MAX_CIPHERTEXT_HEX: usize = 2048;
 const MIN_CIPHERTEXT_HEX: usize = 64;
 /// A sealed delivery is ECIES overhead (97 bytes) plus a short JSON result.
@@ -123,6 +125,11 @@ enum StorageKey {
     Proposals,
     Loans,
     LatestRound,
+    /// The readers the council approved, one borsh `Vec<AccountId>`. Kept outside
+    /// the contract's state struct, so adding it needed no state migration.
+    Readers,
+    /// Present (one byte) while paid reads are limited to approved readers.
+    ReadersOnly,
 }
 
 #[near(serializers = [borsh, json])]
@@ -314,6 +321,15 @@ pub enum ProposalKind {
     /// Changes nothing. It is how a council that has nothing else to decide shows
     /// the panel it is still there.
     Heartbeat,
+    // New kinds go after the existing ones, so proposals already stored keep
+    // their borsh tags.
+    /// Approves an account to buy reads while reads are limited to readers.
+    AddReader(AccountId),
+    RemoveReader(AccountId),
+    /// Limits paid reads to approved readers (true) or opens them to anyone (false,
+    /// the default). Free copies for contributing funds and their auditors are
+    /// never limited.
+    SetReadersOnly(bool),
 }
 
 /// A vote by the panel's funds to replace a council that has made no decision for
@@ -984,6 +1000,10 @@ impl Nema {
     #[payable]
     pub fn buy_read(&mut self, round_id: u64, buyer_pubkey: String) -> Promise {
         let buyer = env::predecessor_account_id();
+        require!(
+            !readers_only() || readers().contains(&buyer),
+            "reads on this panel are limited to readers the council approved"
+        );
         let attached = env::attached_deposit().as_yoctonear();
         let price = self.read_price;
         require!(
@@ -1401,6 +1421,8 @@ impl Nema {
             "project_id": self.project_id,
             "min_contributors": self.min_contributors,
             "read_price": U128(self.read_price),
+            "readers_only": readers_only(),
+            "readers": readers(),
             "application_bond": U128(APPLICATION_BOND),
             "storage_deposit": U128(STORAGE_DEPOSIT),
             "enclave_fee": U128(MIN_OUTLAYER_DEPOSIT),
@@ -1580,6 +1602,20 @@ impl Nema {
                     self.has_active_round(id.0),
                     "a round on this loan is still running",
                 )),
+            ProposalKind::AddReader(a) => {
+                let r = readers();
+                fail(r.contains(a), "already a reader")
+                    .or(fail(r.len() >= MAX_READERS, "the reader list is full"))
+            }
+            ProposalKind::RemoveReader(a) => fail(!readers().contains(a), "not a reader"),
+            ProposalKind::SetReadersOnly(on) => fail(
+                *on == readers_only(),
+                if *on {
+                    "reads are already limited to readers"
+                } else {
+                    "reads are already open to anyone"
+                },
+            ),
         }
     }
 
@@ -1622,6 +1658,24 @@ impl Nema {
                 self.loans.remove(&id.0);
             }
             ProposalKind::Heartbeat => {}
+            ProposalKind::AddReader(a) => {
+                let mut r = readers();
+                r.push(a);
+                set_readers(&r);
+            }
+            ProposalKind::RemoveReader(a) => {
+                let mut r = readers();
+                r.retain(|x| x != &a);
+                set_readers(&r);
+            }
+            ProposalKind::SetReadersOnly(on) => {
+                let key = StorageKey::ReadersOnly.into_storage_key();
+                if on {
+                    env::storage_write(&key, &[1]);
+                } else {
+                    env::storage_remove(&key);
+                }
+            }
         }
         emit("proposal_passed", json!({"id": id, "kind": kind}));
     }
@@ -2239,6 +2293,34 @@ fn is_compressed_pubkey(s: &str) -> bool {
 
 fn is_hex_of_len(s: &str, len: usize) -> bool {
     s.len() == len && len.is_multiple_of(2) && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// The readers the council approved, in the order it approved them.
+fn readers() -> Vec<AccountId> {
+    env::storage_read(&StorageKey::Readers.into_storage_key())
+        .map(|b| {
+            borsh::from_slice(&b)
+                .unwrap_or_else(|_| env::panic_str("the reader list is unreadable"))
+        })
+        .unwrap_or_default()
+}
+
+fn set_readers(r: &[AccountId]) {
+    let key = StorageKey::Readers.into_storage_key();
+    if r.is_empty() {
+        env::storage_remove(&key);
+    } else {
+        env::storage_write(
+            &key,
+            &borsh::to_vec(r).unwrap_or_else(|_| env::panic_str("cannot store readers")),
+        );
+    }
+}
+
+/// Whether paid reads are limited to approved readers. Off unless the council
+/// turned it on.
+fn readers_only() -> bool {
+    env::storage_has_key(&StorageKey::ReadersOnly.into_storage_key())
 }
 
 #[cfg(test)]

@@ -69,6 +69,9 @@ export type Config = {
   application_bond: string;
   storage_deposit?: string;
   enclave_fee?: string;
+  /** Paid reads limited to `readers` (v2.1 and later; absent before). */
+  readers_only?: boolean;
+  readers?: string[];
 };
 
 export type Application = {
@@ -95,7 +98,12 @@ export type ProposalKind =
   /** Takes a loan off the registry by id, once no round on it is running. */
   | { RemoveLoan: string }
   /** Changes nothing; it shows the panel the council is still there. */
-  | "Heartbeat";
+  | "Heartbeat"
+  /** Approves an account to buy reads while reads are limited to readers. */
+  | { AddReader: string }
+  | { RemoveReader: string }
+  /** Limits paid reads to approved readers, or opens them to anyone again. */
+  | { SetReadersOnly: boolean };
 
 export type Proposal = { id: string; kind: ProposalKind; proposer: string; votes: string[]; created_at: string };
 
@@ -121,7 +129,12 @@ export type AuditCopy = {
 };
 
 /** What the enclave seals for a buyer. */
-export type Opened = { count: number; mean: string; spread: string; salt: string };
+/**
+ * A buyer's opened result. `method` is "rounded" (a trimmed mean to an eighth of a
+ * point, the spread to a quarter) for rounds tallied since rounding, "exact" for
+ * earlier rounds, and absent from copies made before the enclave said which.
+ */
+export type Opened = { count: number; mean: string; spread: string; salt: string; method?: "rounded" | "exact" };
 
 /** What the enclave seals for an auditor: the fund's own mark, in hundredths. */
 export type AuditOpened = { kind: "audit"; account: string; round_id: number; mark: number };

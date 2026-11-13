@@ -29,6 +29,9 @@ function describe(kind: ProposalKind): string {
   if ("RemoveCouncil" in kind) return `Remove ${handle(kind.RemoveCouncil)} from the council`;
   if ("SetThreshold" in kind) return `Require ${kind.SetThreshold} council votes for a decision`;
   if ("RemoveLoan" in kind) return `Take loan ${kind.RemoveLoan} off the registry`;
+  if ("AddReader" in kind) return `Approve ${handle(kind.AddReader)} as a reader`;
+  if ("RemoveReader" in kind) return `Remove ${handle(kind.RemoveReader)} from the readers`;
+  if ("SetReadersOnly" in kind) return kind.SetReadersOnly ? "Sell reads only to approved readers" : "Open reads to anyone again";
   return `Register the loan ${loanName(kind.RegisterLoan)}`;
 }
 
@@ -132,6 +135,68 @@ export default function Panel() {
       {config && governed && <CouncilWatch config={config} members={members} takeover={takeover ?? null} account={accountId} isCouncil={isCouncil} onPropose={propose} />}
 
       <Registry loans={loans ?? []} busy={busyLoans} isCouncil={isCouncil} onPropose={propose} />
+
+      {config?.readers_only !== undefined && <Readers config={config} isCouncil={isCouncil} onPropose={propose} />}
+    </div>
+  );
+}
+
+/** Who may buy a read. Open to anyone unless the council limits it to readers it approved. */
+function Readers({ config, isCouncil, onPropose }: { config: Config; isCouncil: boolean; onPropose: Propose }) {
+  const [reader, setReader] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const readers = config.readers ?? [];
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    const a = reader.trim().toLowerCase();
+    if (!validAccount(a)) return setErr("Enter a NEAR account.");
+    if (readers.includes(a)) return setErr("Already a reader.");
+    if (readers.length >= 128) return setErr("The list holds 128 readers, the most it can.");
+    setErr(null);
+    await onPropose({ AddReader: a }, `Proposing ${handle(a)} as a reader`);
+    setReader("");
+  };
+  return (
+    <div className="card" style={{ marginTop: 24 }}>
+      <div className="label">Who can buy a read · {config.readers_only ? `${readers.length} approved readers` : "anyone"}</div>
+      <p className="muted" style={{ marginTop: 8 }}>
+        {config.readers_only
+          ? "Paid reads are limited to the readers below, approved by the council."
+          : "Anyone can pay to read a published round. The council can limit reads to readers it approves, such as vetted lenders."}{" "}
+        Funds whose mark counted, and their auditors, always read their own rounds free.
+      </p>
+      {readers.length > 0 && (
+        <ul className="members" style={{ marginTop: 12 }}>
+          {readers.map((r, i) => (
+            <li key={r}>
+              <span className="av">{i + 1}</span>
+              <span className="mono">{r}</span>
+              {isCouncil && (
+                <button className="btn ghost small" onClick={() => onPropose({ RemoveReader: r }, `Proposing to remove ${handle(r)} from the readers`)}>Propose removal</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isCouncil && (
+        <>
+          <form onSubmit={add} className="field" style={{ marginTop: 12 }}>
+            <label htmlFor="reader" className="sr-only">Account to approve as a reader</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input id="reader" style={{ flex: 1 }} placeholder="lender.testnet" value={reader} onChange={(e) => (setReader(e.target.value), setErr(null))} />
+              <button className="btn ghost" type="submit">Propose reader</button>
+            </div>
+            {err && <span className="err">{err}</span>}
+          </form>
+          <button
+            className="btn ghost small"
+            style={{ marginTop: 12 }}
+            onClick={() => onPropose({ SetReadersOnly: !config.readers_only }, config.readers_only ? "Proposing to open reads to anyone" : "Proposing to limit reads to readers")}
+          >
+            {config.readers_only ? "Propose opening reads to anyone" : "Propose limiting reads to approved readers"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

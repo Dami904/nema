@@ -347,6 +347,8 @@ export type Expect = {
   contract: string;
   project: string;
   wasmSha256: string;
+  /** Earlier Nema builds; a run of one of these is genuine, just older. */
+  earlierWasm?: string[];
 };
 
 export type Verified = { checks: Check[]; request: Requested | null; input: Record<string, unknown> | null; output: unknown };
@@ -380,8 +382,8 @@ export async function verifyRun(att: Attestation, expect: Expect, net = NET): Pr
   add(
     "code",
     "Nema's published enclave build ran",
-    att.wasm_hash === expect.wasmSha256 && att.project_id === expect.project,
-    `${att.project_id ?? "no project"} · wasm ${att.wasm_hash?.slice(0, 12) ?? "?"}…`,
+    (att.wasm_hash === expect.wasmSha256 || (expect.earlierWasm ?? []).includes(att.wasm_hash ?? "")) && att.project_id === expect.project,
+    `${att.project_id ?? "no project"} · wasm ${att.wasm_hash?.slice(0, 12) ?? "?"}…${att.wasm_hash !== expect.wasmSha256 && (expect.earlierWasm ?? []).includes(att.wasm_hash ?? "") ? " (earlier build, exact results)" : ""}`,
   );
 
   let request: Requested | null = null;

@@ -16,6 +16,7 @@
 // Costs about 0.06 NEAR in enclave fees (OutLayer returns most), 0.08 NEAR in storage kept by
 // the contract, and one read price paid by the lender.
 
+import { roundedConsensus } from "../src/lib/consensus";
 import { PrivateKey } from "eciesjs";
 import { BUILDS, CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../src/lib/config";
 import { base58ToHex, commitment, setHash } from "../src/lib/hashes";
@@ -42,23 +43,8 @@ function check(claim: string, ok: boolean, detail = "") {
   if (!ok) failed++;
 }
 
-/** The enclave's integer arithmetic: mean to 0.01, population spread to 0.0001. */
-function expected(marks: number[]) {
-  const n = BigInt(marks.length);
-  const sum = marks.reduce((a, m) => a + BigInt(m), 0n);
-  const sq = marks.reduce((a, m) => a + BigInt(m) * BigInt(m), 0n);
-  const mean = (2n * sum + n) / (2n * n);
-  let lo = 0n;
-  let hi = 1n << 64n;
-  const target = (n * sq - sum * sum) * 10_000n;
-  while (lo < hi) {
-    const mid = (lo + hi + 1n) / 2n;
-    if (mid * mid <= target) lo = mid;
-    else hi = mid - 1n;
-  }
-  const fixed = (v: bigint, d: number) => `${v / 10n ** BigInt(d)}.${(v % 10n ** BigInt(d)).toString().padStart(d, "0")}`;
-  return { mean: fixed(mean, 2), spread: fixed(lo / n, 4) };
-}
+/** What the enclave commits to for these marks: the rounded, trimmed consensus. */
+const expected = (marks: number[]) => roundedConsensus(marks);
 
 console.log(`Nema smoke test on ${CONFIG.contract} (${CONFIG.network})\n`);
 
@@ -147,7 +133,7 @@ const free = await read(funds[0], "claim_read", READ_EXTRA_YOCTO);
 check("a contributing fund opened its copy for free", free.p.status === "Delivered" && free.p.basis === "Contributed" && free.p.price === "0", free.p.error ?? "");
 if (free.p.sealed) {
   const o = openSealed(free.sk, free.p.sealed);
-  check("its copy is the exact consensus", o.mean === want.mean && o.spread === want.spread, `${o.mean} ± ${o.spread}`);
+  check("its copy is the rounded, trimmed consensus", o.mean === want.mean && o.spread === want.spread, `${o.mean} ± ${o.spread}`);
   check("its copy matches the on-chain commitment", (await commitment(CONFIG.contract, BigInt(id), o.salt, o.count, o.mean, o.spread)) === done.listing.commitment);
 }
 

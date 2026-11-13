@@ -90,7 +90,7 @@ fn tally_publishes_count_and_commitment_but_not_the_result() {
     assert_eq!(out["count"], 5);
     assert_eq!(out["set_hash"], h);
     let salt = crypto::result_salt(&MASTER, CONTRACT, 1);
-    assert_eq!(out["commitment"], crypto::commitment(CONTRACT, 1, &salt, 5, "94.10", "1.6324"));
+    assert_eq!(out["commitment"], crypto::commitment(CONTRACT, 1, &salt, 5, "94.125", "1.75"));
     let text = out.to_string();
     assert!(out.get("mean").is_none() && out.get("spread").is_none());
     assert!(!text.contains("94.10") && !text.contains("1.6324"));
@@ -168,20 +168,49 @@ fn only_the_buyer_can_open_the_delivery_and_it_matches_the_commitment() {
     assert_eq!(out["ok"], true);
     assert_eq!(out["set_hash"], h);
     assert_eq!(out["commitment"], c);
-    assert!(!out.to_string().contains("94.10"));
+    assert!(!out.to_string().contains("94.125"));
 
     let sealed = out["sealed"].as_str().unwrap();
     let opened: Value = serde_json::from_slice(&crypto::decrypt_hex(&sk, sealed).unwrap()).unwrap();
     assert_eq!(opened["count"], 5);
-    assert_eq!(opened["mean"], "94.10");
-    assert_eq!(opened["spread"], "1.6324");
+    assert_eq!(opened["mean"], "94.125");
+    assert_eq!(opened["spread"], "1.75");
+    assert_eq!(opened["method"], "rounded");
 
     // The buyer's own check: rebuild the commitment from what they received.
     let salt: [u8; 32] = hex::decode(opened["salt"].as_str().unwrap()).unwrap().try_into().unwrap();
-    assert_eq!(crypto::commitment(CONTRACT, 1, &salt, 5, "94.10", "1.6324"), c);
+    assert_eq!(crypto::commitment(CONTRACT, 1, &salt, 5, "94.125", "1.75"), c);
 
     let (other, _) = buyer();
     assert!(crypto::decrypt_hex(&other, sealed).is_err());
+}
+
+/// The commitment a round got from the enclave before rounding: the exact result.
+fn exact_commitment() -> String {
+    let salt = crypto::result_salt(&MASTER, CONTRACT, 1);
+    crypto::commitment(CONTRACT, 1, &salt, 5, "94.10", "1.6324")
+}
+
+#[test]
+fn tally_commits_the_rounded_result_never_the_exact_one() {
+    let subs = five_funds();
+    let c = published_commitment(&subs);
+    let salt = crypto::result_salt(&MASTER, CONTRACT, 1);
+    assert_eq!(c, crypto::commitment(CONTRACT, 1, &salt, 5, "94.125", "1.75"));
+    assert_ne!(c, exact_commitment());
+}
+
+#[test]
+fn a_round_committed_before_rounding_is_delivered_as_committed() {
+    let subs = five_funds();
+    let h = hash_of(&subs);
+    let (sk, pk) = buyer();
+    let out = handle(deliver_req(subs, h, exact_commitment(), pk), &MASTER, CONTRACT);
+    assert_eq!(out["ok"], true, "{out}");
+    let opened: Value =
+        serde_json::from_slice(&crypto::decrypt_hex(&sk, out["sealed"].as_str().unwrap()).unwrap()).unwrap();
+    assert_eq!((opened["mean"].as_str(), opened["spread"].as_str()), (Some("94.10"), Some("1.6324")));
+    assert_eq!(opened["method"], "exact");
 }
 
 #[test]
@@ -269,7 +298,7 @@ fn eciesjs_ciphertexts_tally() {
     assert_eq!(out["ok"], true, "{out}");
     assert_eq!(out["count"], 5);
     let salt = crypto::result_salt(&MASTER, CONTRACT, 1);
-    assert_eq!(out["commitment"], crypto::commitment(CONTRACT, 1, &salt, 5, "94.10", "1.6324"));
+    assert_eq!(out["commitment"], crypto::commitment(CONTRACT, 1, &salt, 5, "94.125", "1.75"));
 }
 
 // ---- input parsing ----

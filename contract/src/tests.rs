@@ -2996,3 +2996,166 @@ fn the_founding_registry_cannot_list_a_loan_twice() {
         vec!["Loan A".into(), "Loan A".into()],
     );
 }
+
+// ---- reader allowlist ----
+
+/// Passes a proposal with the first two council seats at `secs`.
+fn council_passes(c: &mut Nema, kind: ProposalKind, secs: u64) {
+    let id = {
+        testing_env!(ctx(&owner(), 0, secs));
+        c.propose(kind)
+    };
+    as_member(c, &council2(), secs, |c| c.vote(id));
+}
+
+fn config_readers(c: &Nema) -> (bool, Vec<String>) {
+    let cfg = c.get_config();
+    let list = cfg["readers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a.as_str().unwrap().to_string())
+        .collect();
+    (cfg["readers_only"].as_bool().unwrap(), list)
+}
+
+#[test]
+fn reads_are_open_to_anyone_by_default() {
+    let mut c = published();
+    assert_eq!(config_readers(&c), (false, vec![]));
+    let id = buy(&mut c);
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Pending);
+}
+
+#[test]
+#[should_panic(expected = "limited to readers the council approved")]
+fn a_limited_panel_refuses_an_unapproved_buyer() {
+    let mut c = published();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    assert!(config_readers(&c).0);
+    buy(&mut c);
+}
+
+#[test]
+fn an_approved_reader_can_buy_on_a_limited_panel() {
+    let mut c = published();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    council_passes(&mut c, ProposalKind::AddReader(buyer()), 1060);
+    assert_eq!(config_readers(&c), (true, vec![buyer().to_string()]));
+    let id = buy(&mut c);
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Pending);
+}
+
+#[test]
+#[should_panic(expected = "limited to readers the council approved")]
+fn a_removed_reader_can_no_longer_buy() {
+    let mut c = published();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    council_passes(&mut c, ProposalKind::AddReader(buyer()), 1060);
+    council_passes(&mut c, ProposalKind::RemoveReader(buyer()), 1070);
+    assert_eq!(config_readers(&c), (true, vec![]));
+    buy(&mut c);
+}
+
+#[test]
+fn opening_reads_again_lets_anyone_buy() {
+    let mut c = published();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    council_passes(&mut c, ProposalKind::SetReadersOnly(false), 1060);
+    assert!(!config_readers(&c).0);
+    let id = buy(&mut c);
+    assert_eq!(purchase(&c, id).status, PurchaseStatus::Pending);
+}
+
+#[test]
+fn a_contributing_fund_still_reads_free_on_a_limited_panel() {
+    let mut c = published();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 1050);
+    let f = funds()[0].clone();
+    testing_env!(ctx(&f, READ, 1100));
+    let _ = c.claim_read(1, pubkey());
+    assert_eq!(
+        c.get_purchases_of(f).pop().unwrap().basis,
+        Basis::Contributed
+    );
+}
+
+#[test]
+fn one_council_member_cannot_limit_reads_alone() {
+    let mut c = published();
+    testing_env!(ctx(&owner(), 0, 1050));
+    c.propose(ProposalKind::SetReadersOnly(true));
+    assert!(!config_readers(&c).0);
+}
+
+#[test]
+#[should_panic(expected = "already a reader")]
+fn a_reader_cannot_be_added_twice() {
+    let mut c = fresh();
+    council_passes(&mut c, ProposalKind::AddReader(buyer()), 200);
+    testing_env!(ctx(&owner(), 0, 210));
+    c.propose(ProposalKind::AddReader(buyer()));
+}
+
+#[test]
+#[should_panic(expected = "not a reader")]
+fn removing_an_unknown_reader_is_refused() {
+    let mut c = fresh();
+    c.propose(ProposalKind::RemoveReader(buyer()));
+}
+
+#[test]
+#[should_panic(expected = "reads are already open to anyone")]
+fn opening_reads_that_are_open_is_refused() {
+    let mut c = fresh();
+    c.propose(ProposalKind::SetReadersOnly(false));
+}
+
+#[test]
+#[should_panic(expected = "reads are already limited to readers")]
+fn limiting_reads_twice_is_refused() {
+    let mut c = fresh();
+    council_passes(&mut c, ProposalKind::SetReadersOnly(true), 200);
+    testing_env!(ctx(&owner(), 0, 210));
+    c.propose(ProposalKind::SetReadersOnly(true));
+}
+
+#[test]
+#[should_panic(expected = "the reader list is full")]
+fn the_reader_list_has_a_cap() {
+    let mut c = fresh();
+    for i in 0..MAX_READERS {
+        let a: AccountId = format!("reader{i}.testnet").parse().unwrap();
+        council_passes(&mut c, ProposalKind::AddReader(a), 200 + i as u64);
+    }
+    assert_eq!(config_readers(&c).1.len(), MAX_READERS);
+    testing_env!(ctx(&owner(), 0, 1000));
+    c.propose(ProposalKind::AddReader("one-more.testnet".parse().unwrap()));
+}
+
+#[test]
+fn a_stale_reader_proposal_fails_cleanly() {
+    // Two proposals add the same reader; the second fails on its last vote
+    // instead of adding a duplicate.
+    let mut c = fresh();
+    let first = c.propose(ProposalKind::AddReader(buyer()));
+    let second = {
+        testing_env!(ctx(&council2(), 0, 101));
+        c.propose(ProposalKind::AddReader(buyer()))
+    };
+    as_member(&mut c, &council3(), 102, |c| c.vote(first));
+    as_member(&mut c, &owner(), 103, |c| c.vote(second));
+    assert_eq!(config_readers(&c).1, vec![buyer().to_string()]);
+    assert!(c.get_proposals().is_empty());
+}
+
+#[test]
+fn reader_proposals_keep_older_proposals_readable() {
+    // New kinds were appended: every existing kind keeps its borsh tag.
+    let tag = |k: ProposalKind| near_sdk::borsh::to_vec(&k).unwrap()[0];
+    assert_eq!(tag(ProposalKind::SetReadPrice(U128(0))), 0);
+    assert_eq!(tag(ProposalKind::RemoveLoan(U64(0))), 6);
+    assert_eq!(tag(ProposalKind::Heartbeat), 7);
+    assert_eq!(tag(ProposalKind::AddReader(buyer())), 8);
+    assert_eq!(tag(ProposalKind::SetReadersOnly(true)), 10);
+}
