@@ -9,7 +9,7 @@
 Sealed marks in. One consensus out. Nobody sees a single price.
 
 [![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-160%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![Tests](https://img.shields.io/badge/tests-251%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
@@ -92,8 +92,8 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **160** | automated tests passing: 121 contract, 32 enclave, 7 browser crypto assertions           |
-| **19**  | safety guards, each removed in turn to confirm a test fails without it                   |
+| **251** | automated tests passing: 210 contract, 32 enclave, 9 browser crypto assertions           |
+| **62**  | safety guards, each removed in turn to confirm a test fails without it: 19 in v1, 43 added by the v2 council ([CLAIMS.md](docs/CLAIMS.md)) |
 | **20**  | checks in the live smoke test, all passing on round 6 (current contract, enclave on FastFS) |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
 | **4**   | valid marks at minimum before anything is published                                      |
@@ -241,7 +241,7 @@ flowchart TD
 
 | Path | Role |
 | --- | --- |
-| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 121 tests |
+| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 210 tests |
 | [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 32 tests |
 | [`web/`](web) | The app (React, Vite): seven pages, sample data for every state, wallet sign-in |
 | [`web/scripts/`](web/scripts) | `smoke.ts` (one full live round), `close-rounds.ts`, `check-attest.ts`, `check-crypto.ts` (the `pnpm test` vectors), `cli.ts` (shared NEAR CLI wrapper) |
@@ -255,7 +255,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     autonumber
-    participant O as Owner
+    participant O as Opener (a fund or council member)
     participant F as Funds
     participant C as Nema contract
     participant E as Enclave (OutLayer)
@@ -286,7 +286,7 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> AwaitingKey: owner opens
+    [*] --> AwaitingKey: a panel fund or council member opens
     AwaitingKey --> Open: enclave returns the key
     AwaitingKey --> Failed: key refused, or the deadline passes without one
     Open --> Closing: closed after the deadline
@@ -351,14 +351,14 @@ if set_hash != expected_set_hash {
 
 ## Tested, not claimed
 
-**160 automated tests pass**: 121 contract (`cargo test` in `contract/`), 32 enclave
-(`cargo test` in `aggregator/`) and 7 browser crypto checks (`pnpm test`). CI runs
+**251 automated tests pass**: 210 contract (`cargo test` in `contract/`), 32 enclave
+(`cargo test` in `aggregator/`) and 9 browser crypto checks (`pnpm test`). CI runs
 them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
 rebuild of both wasm files against their pinned hashes, and a scan for committed
 secrets. On top, the live smoke test runs 20 checks on testnet and the attestation
 checker runs 7 on real OutLayer jobs, including tampered copies that must fail.
 
-Each of the 19 guards that protect marks or money was deleted in turn to confirm
+Each of the 19 v1 guards that protect marks or money (the 43 the v2 council adds are listed in [CLAIMS.md](docs/CLAIMS.md)) was deleted in turn to confirm
 some test fails without it: the committed-set check (contract and enclave), the
 caller check, copied ciphertexts, one free copy per round, auditor-only audits,
 the auditor recheck on delivery, dropping removed funds, the duplicate-read
@@ -414,7 +414,7 @@ and ignoring a tally that answers an earlier close.
 - **A reader who opens the result can share it.** Nema controls who can open it, not what they do afterwards.
 - **A reader's key lives in that browser's storage.** Anything that can read the page's storage (an extension, someone at the machine) can open that reader's copies. The app offers a backup file; losing both means losing access.
 - **A fund can still lie inside the valid range.** Out-of-range marks are caught; a plausible wrong mark is not. Its track record, and its auditor, are how that shows over time.
-- **The owner admits funds.** A panel of four accounts one person controls would make the minimum meaningless, so who is on the panel matters, and it is public.
+- **The council admits funds.** A panel of four accounts one person controls would make the minimum meaningless, so who is on the panel matters, and it is public.
 
 - **The contract account still holds a full-access key.** Whoever has it could redeploy the contract or re-lock the enclave's secret, and expose marks. The site shows the deployed code hash so a change is visible; removing the key after the final deploy closes this.
 
@@ -434,7 +434,7 @@ Who is trusted for what, what each key can do if stolen, and what is not defende
 | [`/vault`](https://nema-near.vercel.app/vault) | A fund's earnings, free reads, track record, reading key and auditor |
 | [`/portfolio`](https://nema-near.vercel.app/portfolio) | A lender's borrowing base across every loan it opened, with CSV and PDF export |
 | [`/audit`](https://nema-near.vercel.app/audit) | An auditor's desk: each client's marks as the enclave opened them |
-| [`/panel`](https://nema-near.vercel.app/panel) | The panel of funds, applications, and the owner's tools |
+| [`/panel`](https://nema-near.vercel.app/panel) | The panel of funds, applications, and the council's tools |
 | [`/docs`](https://nema-near.vercel.app/docs) | How it works, the contract methods, the enclave, and quick starts per role |
 
 ---
@@ -523,7 +523,7 @@ Run one real round on testnet and check it (signs with NEAR CLI from the OS
 keychain; about 0.06 NEAR in enclave fees, mostly returned by OutLayer, about 0.08 NEAR in storage and one read price):
 
 ```bash
-pnpm live:smoke --owner nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
+pnpm live:smoke --opener nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
 ```
 
 ---

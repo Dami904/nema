@@ -80,7 +80,7 @@ Without one it fails. 0.0003 NEAR was enough.
 
 **Runs are filed under the signer.**
 OutLayer's job list for an account shows runs signed by that account, so the
-site finds a round's runs under the owner (key), the closer (tally) and the
+site finds a round's runs under whoever opened it (key), the closer (tally) and the
 reader (copies and audits).
 
 **The job list can't be read from another site's page.**
@@ -144,7 +144,7 @@ it fails if the contract source has moved on from that commit without a new depl
 longer answer instead of loading it. Nema treats `TooLong` as a failed run whose
 fee OutLayer keeps, because the enclave did run. A read's price goes back to the
 buyer, a close or an audit can be asked again, and a round whose key came back
-too long fails (the owner opens a new one). Only `Failed` (the call itself
+too long fails (a new round is opened on the loan). Only `Failed` (the call itself
 failed) refunds the fee. Real answers are a few KB. The gas needed to parse an
 answer near the cap inside the 40 Tgas callback has not been measured (see
 THREAT_MODEL, known weaknesses).

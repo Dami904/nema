@@ -3,7 +3,7 @@
 export const WHO_SEES_WHAT = [
   { party: "A fund", sees: "Its own mark, and the result for free if its mark counted.", not: "Any other fund's mark." },
   { party: "A lender", sees: "The mean, spread and count it paid for.", not: "Any single fund's mark." },
-  { party: "The owner", sees: "Who is on the panel and who submitted.", not: "Marks, or the result without paying." },
+  { party: "The council", sees: "Who is on the panel and who submitted.", not: "Marks, or the result without paying." },
   { party: "A fund's auditor", sees: "That fund's own marks, opened by the enclave, and results it counted in.", not: "Any other fund's mark." },
   { party: "The public", sees: "Who submitted, the count, and a commitment.", not: "Marks or the result." },
   { party: "The enclave", sees: "Every mark in a round, for the moment it runs.", not: "Anything outside the round it was called for." },
@@ -15,7 +15,7 @@ export const TRUST = [
   "Only the round's contract can ask the enclave to tally or deliver, and only for the set of submissions it froze at the deadline.",
   "The enclave trusts the contract's account, not its code. While that account still holds a full-access key, whoever has the key could deploy different code and have the enclave tally a hand-picked set, which could expose marks. The Verify section shows if the code changes; removing the key closes this for good.",
   "A buyer who opens the result can share it. Nothing stops that.",
-  "The owner picks the panel. That's a stated assumption, not something the code removes.",
+  "A council of 3 to 7 accounts picks the panel by majority vote, with a veto window on each admission. If the council goes silent, two thirds of the panel's funds can replace it. Whether the seats are really independent is a stated assumption, not something the code checks.",
   "A fund can shade its mark inside the valid range. Only out-of-range marks are caught.",
   "Your reading key lives in this browser's storage. Anything that can read the page's storage can open your reads, so keep the backup file private.",
   "A mark you choose to keep on this device is stored there in plain form, so you can see where it sat. Leave the box unticked on a shared computer.",
@@ -23,8 +23,8 @@ export const TRUST = [
 
 export const FAQ = [
   {
-    q: "Can the owner of the contract read the marks?",
-    a: "Not with the code that's deployed. Marks are encrypted in each fund's browser to a key that exists only inside the enclave, and the owner holds no key that opens one. But the enclave trusts the contract's account, and while that account keeps a full-access key it could be given different code. The Verify section shows the deployed code's hash so a change can't go unseen, and removing the key rules it out.",
+    q: "Can the council, or whoever deployed the contract, read the marks?",
+    a: "Not with the code that's deployed. Marks are encrypted in each fund's browser to a key that exists only inside the enclave, and no council member holds a key that opens one. But the enclave trusts the contract's account, and while that account keeps a full-access key it could be given different code. The Verify section shows the deployed code's hash so a change can't go unseen, and removing the key rules it out.",
   },
   {
     q: "Why does a round need at least four funds?",
@@ -52,7 +52,7 @@ export const FAQ = [
   },
   {
     q: "What can a fund's auditor see?",
-    a: "Only that fund's own marks, which the enclave opens from the ciphertext on chain once the round stops taking marks, and seals to the auditor, so the fund can't hand over a different number. It reads free only rounds that closed after it was named. The fund names or removes its auditor; the owner can't.",
+    a: "Only that fund's own marks, which the enclave opens from the ciphertext on chain once the round stops taking marks, and seals to the auditor, so the fund can't hand over a different number. It reads free only rounds that closed after it was named. The fund names or removes its auditor; the council can't.",
   },
   {
     q: "Can a fund change its mark?",

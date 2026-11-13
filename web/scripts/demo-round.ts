@@ -1,9 +1,9 @@
 // The other side of a recorded round, one step at a time, so a person can do
 // their part in the app in between. Every transaction is real and signed with
-// NEAR CLI from the OS keychain (the owner, fund1-4 and the lender accounts).
+// NEAR CLI from the OS keychain (a council seat, fund1-4 and the lender accounts).
 //
-//   pnpm live:demo-round approve --account someone.testnet   the owner admits an applicant
-//   pnpm live:demo-round open --minutes 20                   the owner opens a round
+//   pnpm live:demo-round approve --account someone.testnet   the council admits an applicant
+//   pnpm live:demo-round open --minutes 20                   registers the loan if needed, opens a round
 //   pnpm live:demo-round marks --round 7                     fund1-4 seal and submit marks
 //   pnpm live:demo-round read --round 7                      the lender buys a read
 //
@@ -11,15 +11,16 @@
 // read price plus 0.03 NEAR. OutLayer returns most of each enclave fee.
 
 import { PrivateKey } from "eciesjs";
-import { CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../src/lib/config";
+import { ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../src/lib/config";
 import { encodeLoan } from "../src/lib/loan";
 import { sealMark } from "../src/lib/keys";
 import type { Config, Purchase, Round } from "../src/lib/types";
-import { allRounds, arg, call, until, view } from "./cli";
+import { allRounds, approveAndAdmit, arg, BASE, call, FUNDS, LENDER, registerLoan, until, view } from "./cli";
 
-const owner = arg("owner", CONFIG.contract);
-const funds = [1, 2, 3, 4].map((n) => `fund${n}.${CONFIG.contract}`);
-const lender = arg("lender", `lender.${CONFIG.contract}`);
+/** Anyone on the panel or the council may open a round; this one signs as the first council seat. */
+const opener = arg("opener", BASE);
+const funds = FUNDS;
+const lender = arg("lender", LENDER);
 /** Marks in hundredths, the same ones the smoke test uses. */
 const MARKS = [9410, 9525, 9180, 9655];
 const step = process.argv[2];
@@ -33,7 +34,7 @@ async function openRound(id: string): Promise<Round> {
 if (step === "approve") {
   const account = arg("account", "");
   if (!account) throw new Error("--account is required");
-  call(owner, "approve", { account });
+  await approveAndAdmit(account);
   console.log(`${account} is on the panel`);
 } else if (step === "open") {
   const minutes = Number(arg("minutes", "20"));
@@ -44,7 +45,8 @@ if (step === "approve") {
     facility: arg("facility", "Senior term loan B"),
     maturity: arg("maturity", "2030-06-30"),
   });
-  call(owner, "open_round", { loan, closes_at: closesAt.toString() }, ENCLAVE_FEE_YOCTO, 300);
+  const loanId = await registerLoan(loan);
+  call(opener, "open_round", { loan_id: loanId, closes_at: closesAt.toString() }, ENCLAVE_FEE_YOCTO, 300);
   const created = await until("the new round", async () => (await allRounds()).find((r) => !before.has(r.id) && r.loan === loan), (r) => !!r, 60_000);
   const open = await until("the round key", () => openRound(created!.id), (r) => r.status !== "AwaitingKey", 180_000);
   if (open.status !== "Open") throw new Error(`round ${open.id} ${open.status}: ${open.last_error ?? ""}`);

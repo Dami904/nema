@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { useToast } from "../components/Toaster";
 import { useChain } from "./chain";
 import { CONFIG } from "./config";
-import { DEMO_AUDITOR, DEMO_LENDER, simulate } from "./demo";
+import { DEMO_AUDITOR, DEMO_COUNCIL, DEMO_LENDER, simulate } from "./demo";
 import { useWallet, type Call } from "./wallet";
 
 export const DEMO_PERSONAS = [
@@ -11,7 +11,7 @@ export const DEMO_PERSONAS = [
   { id: DEMO_LENDER, role: "Lender" },
   { id: DEMO_AUDITOR, role: "Auditor" },
   { id: `applicant.${CONFIG.contract}`, role: "Applicant" },
-  { id: CONFIG.contract, role: "Owner" },
+  { id: DEMO_COUNCIL[0], role: "Council" },
 ];
 
 type Account = {

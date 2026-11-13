@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CONFIG } from "../src/lib/config";
 import { view } from "../src/lib/near";
-import type { Round } from "../src/lib/types";
+import type { Application, Config, Proposal, ProposalKind, RegisteredLoan, Round } from "../src/lib/types";
 
 export { view };
 
@@ -94,4 +94,67 @@ export async function allRounds(): Promise<Round[]> {
 export function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+}
+
+/**
+ * The accounts the live scripts sign as. Names come from here, not from the
+ * contract's own name, so a new contract can reuse the same funded accounts.
+ */
+export const BASE = process.env.NEMA_ACCOUNTS ?? "nema-dev.testnet";
+export const FUNDS = [1, 2, 3, 4].map((n) => `fund${n}.${BASE}`);
+export const LENDER = `lender.${BASE}`;
+/** Council seats the scripts hold keys for. Another seat may be a wallet the scripts can't sign for. */
+export const COUNCIL_SIGNERS = (process.env.NEMA_COUNCIL ?? `${BASE},${LENDER}`).split(",");
+
+const APPLICATION_BOND = 5n * 10n ** 22n;
+
+/** Puts `kind` to the council and votes it through with the seats the scripts hold. */
+export async function decide(kind: ProposalKind): Promise<void> {
+  const { threshold } = await view<Config>("get_config");
+  if (COUNCIL_SIGNERS.length < threshold) throw new Error(`the scripts hold ${COUNCIL_SIGNERS.length} council seats; ${threshold} votes are needed`);
+  const before = new Set((await view<Proposal[]>("get_proposals")).map((p) => p.id));
+  call(COUNCIL_SIGNERS[0], "propose", { kind }, 0n, 60);
+  const made = (await view<Proposal[]>("get_proposals")).find((p) => !before.has(p.id));
+  if (!made) return; // it passed on the proposal itself
+  for (const signer of COUNCIL_SIGNERS.slice(1, threshold)) call(signer, "vote", { proposal_id: made.id }, 0n, 60);
+}
+
+/** The id of a registered loan with this label, registering it by council vote if needed. */
+export async function registerLoan(label: string): Promise<string> {
+  const find = async () => (await view<RegisteredLoan[]>("get_loans")).find((l) => l.label === label);
+  const have = await find();
+  if (have) return have.id;
+  await decide({ RegisterLoan: label });
+  const made = await find();
+  if (!made) throw new Error("the loan was not registered");
+  return made.id;
+}
+
+/** Council approvals up to the threshold, then (after the veto window) the admission itself. */
+export async function approveAndAdmit(account: string): Promise<void> {
+  const config = await view<Config>("get_config");
+  const application = async () => (await view<Application[]>("get_applications")).find((a) => a.account === account);
+  const first = await application();
+  if (!first) throw new Error(`${account} has not applied`);
+  // Safe to re-run: seats that already approved are skipped, and so is a ready admission.
+  if (!first.ready_at) {
+    const live = first.approvals.filter((a) => config.council.includes(a)).length;
+    const todo = COUNCIL_SIGNERS.filter((s) => !first.approvals.includes(s)).slice(0, Math.max(0, config.threshold - live));
+    for (const signer of todo) call(signer, "approve", { account }, 0n, 60);
+  }
+  const app = await application();
+  if (!app?.ready_at) throw new Error(`${account} is not ready to admit`);
+  const readyMs = Number(BigInt(app.ready_at) / 1_000_000n);
+  const wait = readyMs - Date.now() + 2_000;
+  if (wait > 0) {
+    console.log(`  …   veto window: waiting ${Math.ceil(wait / 1000)}s`);
+    await sleep(wait);
+  }
+  call(BASE, "finalize_admission", { account }, 0n, 60);
+}
+
+/** A fund applies (with its bond) and the council admits it. */
+export async function applyAndAdmit(account: string): Promise<void> {
+  call(account, "apply", { auditor: null, note: null }, APPLICATION_BOND, 30);
+  await approveAndAdmit(account);
 }

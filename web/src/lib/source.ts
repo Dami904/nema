@@ -2,7 +2,7 @@
 
 import { demoStore } from "./demo";
 import { view } from "./near";
-import type { Application, AuditCopy, Basis, Config, Purchase, Round, Submission } from "./types";
+import type { Application, AuditCopy, Basis, Config, RegisteredLoan, Proposal, Purchase, Round, Submission, Takeover } from "./types";
 
 export type Source = {
   config(): Promise<Config>;
@@ -13,6 +13,9 @@ export type Source = {
   purchasesOf(account: string): Promise<Purchase[]>;
   earnings(account: string): Promise<string>;
   applications(): Promise<Application[]>;
+  loans(): Promise<RegisteredLoan[]>;
+  proposals(): Promise<Proposal[]>;
+  takeover(): Promise<Takeover | null>;
   auditorOf(fund: string): Promise<string | null>;
   clientsOf(auditor: string): Promise<string[]>;
   auditsOf(auditor: string): Promise<AuditCopy[]>;
@@ -42,6 +45,9 @@ export const live: Source = {
   purchasesOf: (account) => view("get_purchases_of", { buyer: account }),
   earnings: (account) => view("get_earnings", { account }),
   applications: () => view("get_applications"),
+  loans: () => view("get_loans"),
+  proposals: () => view("get_proposals"),
+  takeover: () => view("get_takeover"),
   auditorOf: (fund) => view("get_auditor", { fund }),
   clientsOf: (auditor) => view("get_clients_of", { auditor }),
   auditsOf: (auditor) => view("get_audits_of", { auditor }),
@@ -58,6 +64,9 @@ export const demo: Source = {
   purchasesOf: async (account) => (await demoStore()).purchases.filter((p) => p.buyer === account),
   earnings: async (account) => (await demoStore()).earnings[account] ?? "0",
   applications: async () => (await demoStore()).applications,
+  loans: async () => (await demoStore()).loans,
+  proposals: async () => (await demoStore()).proposals,
+  takeover: async () => (await demoStore()).takeover,
   auditorOf: async (fund) => (await demoStore()).auditors[fund] ?? null,
   clientsOf: async (auditor) => {
     const { auditors, members } = await demoStore();

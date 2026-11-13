@@ -168,7 +168,7 @@ export default function Home() {
         <section className="closer">
           <div>
             <h2>See a round <em>from every side</em></h2>
-            <p>The sample data plays a fund, a lender, an auditor and the owner. No wallet needed.</p>
+            <p>The sample data plays a fund, a lender, an auditor and a council member. No wallet needed.</p>
           </div>
           <div className="cta">
             <button className="btn light" onClick={() => sample("/rounds")}>Try it with sample data</button>

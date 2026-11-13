@@ -45,7 +45,7 @@ What Nema does not do yet, or does only partly. Each item says why.
   fund removed before close: its mark was dropped, the round failed with 3 of 4,
   and the closer's deposit came back. Settling a stuck call, a bounced payment
   and a refused enclave call can't be caused on demand and have never happened
-  live; 121 contract tests cover them.
+  live; 210 contract tests cover them.
 - **Enclave quotes are checked, revocation is not.** The browser checks the chain
   to Intel's root and the measurements, not Intel's TCB status or revocation
   lists.
@@ -77,7 +77,7 @@ What Nema does not do yet, or does only partly. Each item says why.
 
 ## Out of scope
 
-- **Proving funds are independent.** The owner admits funds; the panel is public.
+- **Proving funds are independent.** The council admits funds by majority vote; the panel is public.
 - **Stopping a reader from sharing the result.**
 - **Catching a plausible wrong mark.** Only out-of-range, copied and undecryptable
   marks are dropped. Track records and auditors show the rest over time.

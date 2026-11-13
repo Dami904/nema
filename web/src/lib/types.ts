@@ -13,7 +13,11 @@ export type Listing = {
 /** `RoundView` from the contract. Timestamps are nanoseconds as decimal strings. */
 export type Round = {
   id: string;
+  /** The registered loan this round prices, and its label. */
+  loan_id: string;
   loan: string;
+  /** Who opened it. OutLayer files the key-derivation run under this account. */
+  opened_by: string;
   status: RoundStatus;
   opened_at: string;
   closes_at: string;
@@ -46,7 +50,18 @@ export type Purchase = {
 };
 
 export type Config = {
-  owner: string;
+  /** The accounts that decide admissions, removals, the price and the council itself. */
+  council: string[];
+  /** How many of them must agree. */
+  threshold: number;
+  /** Seconds an approved admission waits, so a council member can still veto it. */
+  admit_delay_secs: number;
+  /** The part of each paid read, in basis points, split among the council seats. Fixed at deploy. */
+  council_share_bps: number;
+  /** Seconds the council may go without a decision before the panel can replace it. */
+  council_dormant_after_secs: number;
+  /** When the council last made a decision (ns). */
+  last_council_action: string;
   outlayer: string;
   project_id: string;
   min_contributors: number;
@@ -56,7 +71,39 @@ export type Config = {
   enclave_fee?: string;
 };
 
-export type Application = { account: string; auditor: string | null; note: string; applied_at: string; bond: string };
+export type Application = {
+  account: string;
+  auditor: string | null;
+  note: string;
+  applied_at: string;
+  bond: string;
+  /** Council members who approved it. */
+  approvals: string[];
+  /** When anyone may admit it (set once enough have approved); null before. */
+  ready_at: string | null;
+};
+
+/** What the council can put to a vote (the contract's `ProposalKind`, as JSON). */
+export type ProposalKind =
+  | { SetReadPrice: string }
+  | { RemoveMember: string }
+  | { AddCouncil: string }
+  | { RemoveCouncil: string }
+  /** How many council members must agree; the contract keeps it a majority. */
+  | { SetThreshold: number }
+  | { RegisterLoan: string }
+  /** Takes a loan off the registry by id, once no round on it is running. */
+  | { RemoveLoan: string }
+  /** Changes nothing; it shows the panel the council is still there. */
+  | "Heartbeat";
+
+export type Proposal = { id: string; kind: ProposalKind; proposer: string; votes: string[]; created_at: string };
+
+/** A vote by the panel's funds to replace a council that has gone quiet. */
+export type Takeover = { council: string[]; threshold: number; proposer: string; votes: string[]; created_at: string };
+
+/** A loan the council registered; rounds are opened on these. */
+export type RegisteredLoan = { id: string; label: string };
 
 export type AuditStatus = "Pending" | "Delivered" | "Failed";
 
