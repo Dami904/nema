@@ -21,11 +21,17 @@ Built for the NEAR Hackathon · Privacy & Private AI track.
 
 </div>
 
+## Demo video
+
 <!--
-  DEMO VIDEO GOES HERE (under the header, before "The problem").
-  On GitHub: edit README.md in the browser, drag the .mp4 into this spot, and GitHub
-  inserts a https://github.com/user-attachments/assets/... link that plays inline.
+  REPLACE THE LINE BELOW WITH THE VIDEO.
+  On GitHub: open README.md, click the pencil (Edit), delete the line below, and drag
+  the .mp4 into its place. GitHub uploads it and inserts a
+  https://github.com/user-attachments/assets/... link that plays inline here.
+  Video uploads must be under 10 MB on a free account (100 MB on a paid one); a
+  larger file can go on YouTube instead, linked from a thumbnail image.
 -->
+**Demo video: coming with the final recording.** Until then, [judge it in 90 seconds](#judge-it-in-90-seconds) on the live app.
 
 ---
 
@@ -255,6 +261,7 @@ The browser repeats the same arithmetic ([`web/src/lib/consensus.ts`](web/src/li
 ```mermaid
 flowchart TD
   subgraph Browser["Browser · nema-near.vercel.app"]
+    G["Council<br/>admits funds, registers loans, approves readers"]
     F["Fund<br/>seals its mark to the round key"]
     L["Lender<br/>reading key kept on the device"]
     A["Auditor"]
@@ -264,10 +271,11 @@ flowchart TD
     C["Nema contract<br/>nema-v2.testnet"]
   end
   subgraph OutLayer["OutLayer · Intel TDX"]
-    E["Nema enclave module<br/>wasm f3173709…"]
+    E["Nema enclave module<br/>wasm f3173709… · trimmed, rounded tally"]
     K["Keystore<br/>master secret, locked to the contract + build"]
   end
 
+  G -- "propose · vote" --> C
   F -- "submit ciphertext" --> C
   L -- "buy_read + public key" --> C
   A -- "request_audit + public key" --> C
@@ -301,30 +309,32 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     autonumber
+    participant G as Council
     participant O as Opener (a fund or council member)
     participant F as Funds
     participant C as Nema contract
     participant E as Enclave (OutLayer)
     participant L as Lender
 
-    O->>C: open_round(loan, deadline)
+    G->>C: propose RegisterLoan, then a majority votes
+    O->>C: open_round(loan_id, closes_at)
     C->>E: derive_pubkey(round)
     E-->>C: round public key
     F->>C: submit(sealed mark), one per fund
     Note over C: deadline passes
-    F->>C: close_round: anyone may close
+    F->>C: close_round: any account may close
     C->>C: commit the set hash
     C->>E: tally(set, set hash, minimum)
-    E->>E: refuse any other set, decrypt, drop bad marks
+    E->>E: refuse any other set, decrypt, drop bad marks, trim, round
     alt fewer than 4 valid
-        E-->>C: nothing published
+        E-->>C: refused: nothing published (round CloseFailed)
     else 4 or more
-        E-->>C: count, rejected, commitment
+        E-->>C: count, rejected, commitment to the rounded result
     end
-    L->>C: buy_read(public key) + price
+    L->>C: buy_read(public key) + price (approved readers only, if the council limits reads)
     C->>E: deliver(set, commitment, lender key)
     E-->>C: result sealed to the lender
-    C->>C: split the price among contributing funds
+    C->>C: split the price: 5% to the council seats, the rest to contributing funds
     L->>L: open in the browser, check against the commitment
 ```
 
@@ -336,9 +346,9 @@ stateDiagram-v2
     AwaitingKey --> Open: enclave returns the key
     AwaitingKey --> Failed: key refused, or the deadline passes without one
     Open --> Closing: closed after the deadline
-    Open --> Failed: fewer than 4 submitted
+    Open --> Failed: fewer than 4 panel funds submitted by the close
     Closing --> Published: tally committed
-    Closing --> CloseFailed: enclave run failed, or no answer in 30 minutes
+    Closing --> CloseFailed: enclave run failed, fewer than 4 valid, or no answer in 30 minutes
     CloseFailed --> Closing: anyone retries
     Published --> [*]
     Failed --> [*]
