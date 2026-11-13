@@ -4,6 +4,8 @@ use near_sdk::testing_env;
 use near_sdk::PromiseResult;
 
 const NS: u64 = 1_000_000_000;
+/// How long a test council may stay silent before the panel can replace it.
+const DORMANT_SECS: u64 = 90 * 24 * 3600;
 const DEPOSIT: u128 = MIN_OUTLAYER_DEPOSIT;
 /// What a read or an audit attaches on top of any price: storage plus the enclave fee.
 const READ: u128 = STORAGE_DEPOSIT + MIN_OUTLAYER_DEPOSIT;
@@ -18,8 +20,39 @@ fn ctx(pred: &AccountId, deposit: u128, secs: u64) -> near_sdk::VMContext {
         .build()
 }
 
+/// The first council seat. It also holds the indivisible remainder of a read fee.
 fn owner() -> AccountId {
     accounts(0)
+}
+
+fn council2() -> AccountId {
+    "council2.testnet".parse().unwrap()
+}
+
+fn council3() -> AccountId {
+    "council3.testnet".parse().unwrap()
+}
+
+fn council() -> Vec<AccountId> {
+    vec![owner(), council2(), council3()]
+}
+
+fn build(threshold: u32, delay_secs: u64, min: u32) -> Nema {
+    Nema::new(
+        council(),
+        threshold,
+        delay_secs,
+        DORMANT_SECS,
+        "outlayer.testnet".parse().unwrap(),
+        "nema-dev.testnet/nema-aggregator".into(),
+        "nema-dev.testnet".parse().unwrap(),
+        "default".into(),
+        min,
+        U128(PRICE),
+        0,
+        vec![],
+        vec!["Loan A".into(), "Loan B".into()],
+    )
 }
 
 fn funds() -> Vec<AccountId> {
@@ -46,27 +79,26 @@ fn sealed() -> String {
     "5e".repeat(220)
 }
 
+/// A council of three and a panel of four funds, enough to open a round.
 fn fresh() -> Nema {
+    // The mock keeps storage between contracts built in one test; start clean.
+    near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
     testing_env!(ctx(&owner(), 0, 100));
-    Nema::new(
-        owner(),
-        "outlayer.testnet".parse().unwrap(),
-        "nema-dev.testnet/nema-aggregator".into(),
-        "nema-dev.testnet".parse().unwrap(),
-        "default".into(),
-        4,
-        U128(PRICE),
-    )
+    let mut c = build(2, 0, 4);
+    for f in funds().into_iter().take(4) {
+        c.members.insert(f);
+    }
+    c
 }
 
 /// A contract with five funds and one open round (closes at t=1000s).
 fn with_open_round() -> Nema {
     let mut c = fresh();
     for f in funds() {
-        c.add_member(f);
+        c.members.insert(f);
     }
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     c.apply_round_key(1, Ok(json!({ "ok": true, "pubkey": pubkey() })));
     c
 }
@@ -135,31 +167,7 @@ fn purchase(c: &Nema, id: u64) -> Purchase {
 #[should_panic(expected = "at least 4")]
 fn minimum_below_four_is_refused() {
     testing_env!(ctx(&owner(), 0, 100));
-    Nema::new(
-        owner(),
-        "outlayer.testnet".parse().unwrap(),
-        "p".into(),
-        "s.testnet".parse().unwrap(),
-        "default".into(),
-        3,
-        U128(PRICE),
-    );
-}
-
-#[test]
-#[should_panic(expected = "only the owner")]
-fn only_the_owner_adds_members() {
-    let mut c = fresh();
-    testing_env!(ctx(&accounts(1), 0, 100));
-    c.add_member(accounts(2));
-}
-
-#[test]
-#[should_panic(expected = "only the owner")]
-fn only_the_owner_sets_the_price() {
-    let mut c = fresh();
-    testing_env!(ctx(&accounts(1), 0, 100));
-    c.set_read_price(U128(0));
+    build(2, 0, 3);
 }
 
 #[test]
@@ -167,7 +175,7 @@ fn only_the_owner_sets_the_price() {
 fn opening_a_round_needs_the_enclave_deposit() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), 1, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
 }
 
 // ---- round key ----
@@ -176,7 +184,7 @@ fn opening_a_round_needs_the_enclave_deposit() {
 fn round_waits_for_its_key_then_opens() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     assert_eq!(status(&c), RoundStatus::AwaitingKey);
     c.apply_round_key(1, Ok(json!({ "ok": true, "pubkey": pubkey() })));
     assert_eq!(status(&c), RoundStatus::Open);
@@ -187,7 +195,7 @@ fn round_waits_for_its_key_then_opens() {
 fn a_round_that_never_got_its_key_can_be_ended_after_its_deadline() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     close(&mut c);
     assert_eq!(status(&c), RoundStatus::Failed);
     assert!(c
@@ -203,7 +211,7 @@ fn a_round_that_never_got_its_key_can_be_ended_after_its_deadline() {
 fn a_keyless_round_cannot_be_ended_early() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     testing_env!(ctx(&accounts(1), DEPOSIT, 500));
     let _ = c.close_round(1);
 }
@@ -212,7 +220,7 @@ fn a_keyless_round_cannot_be_ended_early() {
 fn malformed_key_fails_the_round() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     c.apply_round_key(1, Ok(json!({ "ok": true, "pubkey": "04deadbeef" })));
     assert_eq!(status(&c), RoundStatus::Failed);
 }
@@ -221,7 +229,7 @@ fn malformed_key_fails_the_round() {
 fn the_enclave_refusing_a_key_is_recorded() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     c.apply_round_key(
         1,
         Ok(json!({ "ok": false, "error": "only the round's contract may call this module" })),
@@ -235,7 +243,7 @@ fn the_enclave_refusing_a_key_is_recorded() {
 fn enclave_error_on_key_fails_the_round_without_panicking() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     c.apply_round_key(1, Err("boom".into()));
     let r = c.get_round(U64(1)).unwrap();
     assert_eq!(r.status, RoundStatus::Failed);
@@ -256,9 +264,9 @@ fn outsiders_cannot_submit() {
 #[should_panic(expected = "not open")]
 fn cannot_submit_before_the_key_arrives() {
     let mut c = fresh();
-    c.add_member(accounts(1));
+    c.members.insert(accounts(1));
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     testing_env!(ctx(&accounts(1), 0, 200));
     let _ = c.submit(1, ct(1));
 }
@@ -837,6 +845,16 @@ fn applicant() -> AccountId {
     "newfund.testnet".parse().unwrap()
 }
 
+/// Two council votes (the threshold), then the admission is finalized.
+fn admit(c: &mut Nema) {
+    testing_env!(ctx(&owner(), 0, 130));
+    c.approve(applicant());
+    testing_env!(ctx(&council2(), 0, 130));
+    c.approve(applicant());
+    testing_env!(ctx(&accounts(4), 0, 131));
+    let _ = c.finalize_admission(applicant());
+}
+
 fn apply_now(c: &mut Nema) {
     testing_env!(ctx(&applicant(), BOND, 120));
     c.apply(Some(auditor()), Some("Mid-market credit, 40 loans".into()));
@@ -847,8 +865,7 @@ fn an_approved_applicant_joins_with_its_auditor() {
     let mut c = fresh();
     apply_now(&mut c);
     assert_eq!(c.get_applications().len(), 1);
-    testing_env!(ctx(&owner(), 0, 130));
-    let _ = c.approve(applicant());
+    admit(&mut c);
     assert!(c.get_members().contains(&applicant()));
     assert!(c.get_applications().is_empty());
     assert_eq!(c.get_auditor(applicant()), Some(auditor()));
@@ -893,12 +910,12 @@ fn a_member_cannot_apply() {
 }
 
 #[test]
-#[should_panic(expected = "only the owner")]
-fn only_the_owner_approves() {
+#[should_panic(expected = "only a council member")]
+fn only_the_council_approves() {
     let mut c = fresh();
     apply_now(&mut c);
     testing_env!(ctx(&applicant(), 0, 130));
-    let _ = c.approve(applicant());
+    c.approve(applicant());
 }
 
 #[test]
@@ -1130,67 +1147,6 @@ fn long_enclave_errors_are_cut() {
     );
 }
 
-// ---- upgrade ----
-
-#[test]
-fn migrate_keeps_rounds_reads_and_earnings() {
-    // The previous build's state: a published round with a delivered read.
-    let mut c = published();
-    let id = buy(&mut c);
-    let h = set_hash(&c);
-    c.apply_delivery(id, Ok(good_delivery(&h)));
-    let Nema {
-        owner,
-        outlayer_id,
-        project_id,
-        secrets_account,
-        secrets_profile,
-        min_contributors,
-        read_price,
-        members,
-        rounds,
-        next_round_id,
-        purchases,
-        next_purchase_id,
-        earnings,
-        applications,
-        auditors,
-        audits,
-        next_audit_id,
-        purchases_by_buyer,
-        audits_by_auditor,
-        ..
-    } = c;
-    let old = NemaV2 {
-        owner,
-        outlayer_id,
-        project_id,
-        secrets_account,
-        secrets_profile,
-        min_contributors,
-        read_price,
-        members,
-        rounds,
-        next_round_id,
-        purchases,
-        next_purchase_id,
-        earnings,
-        applications,
-        auditors,
-        audits,
-        next_audit_id,
-        purchases_by_buyer,
-        audits_by_auditor,
-    };
-    env::state_write(&old);
-    drop(old);
-    let c = Nema::migrate();
-    assert_eq!(c.get_members().len(), 5);
-    assert_eq!(status(&c), RoundStatus::Published);
-    assert_eq!(purchase(&c, id).status, PurchaseStatus::Delivered);
-    assert_eq!(c.get_earnings(accounts(1)).0, PRICE / 5);
-}
-
 // ---- reliability: idempotent reads, settling unanswered calls ----
 
 /// Seconds after `close` (t=1001s) at which the tally is old enough to settle.
@@ -1311,7 +1267,7 @@ fn a_fund_removed_before_the_close_does_not_count() {
     let mut c = with_open_round();
     submit_all(&mut c);
     testing_env!(ctx(&owner(), 0, 300));
-    c.remove_member(funds()[0].clone());
+    c.members.remove(&funds()[0].clone());
     close(&mut c);
     let r = c.get_round(U64(1)).unwrap();
     assert_eq!(r.status, RoundStatus::Closing);
@@ -1327,8 +1283,8 @@ fn removing_enough_funds_fails_the_round_at_close() {
     let mut c = with_open_round();
     submit_all(&mut c);
     testing_env!(ctx(&owner(), 0, 300));
-    c.remove_member(funds()[0].clone());
-    c.remove_member(funds()[1].clone());
+    c.members.remove(&funds()[0].clone());
+    c.members.remove(&funds()[1].clone());
     close(&mut c);
     assert_eq!(status(&c), RoundStatus::Failed);
 }
@@ -1539,7 +1495,7 @@ fn an_answer_too_long_to_read_is_a_failure_not_a_panic() {
 fn a_round_key_too_long_to_read_fails_the_round_and_keeps_the_fee() {
     let mut c = fresh();
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     answered(
         PromiseResult::Successful(vec![b' '; MAX_ENCLAVE_ANSWER + 1]),
         101,
@@ -1624,8 +1580,7 @@ fn withdrawing_pays_the_whole_balance() {
 fn every_bond_is_paid_back() {
     let mut c = fresh();
     apply_now(&mut c);
-    testing_env!(ctx(&owner(), 0, 130));
-    let _ = c.approve(applicant());
+    admit(&mut c);
     assert_eq!(refunded_to(&applicant()), BOND, "approved");
 
     let mut c = fresh();
@@ -1685,10 +1640,10 @@ fn a_late_audit_after_settling_is_ignored() {
 fn a_late_key_for_an_ended_round_is_ignored() {
     let mut c = fresh();
     for f in funds() {
-        c.add_member(f);
+        c.members.insert(f);
     }
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     testing_env!(ctx(&accounts(1), DEPOSIT, 1001));
     let _ = c.close_round(1);
     assert_eq!(status(&c), RoundStatus::Failed);
@@ -1792,10 +1747,10 @@ fn a_full_round_fits_in_the_callback_gas() {
         .map(|i| format!("fund{i}.testnet").parse().unwrap())
         .collect();
     for f in &panel {
-        c.add_member(f.clone());
+        c.members.insert(f.clone());
     }
     testing_env!(ctx(&owner(), DEPOSIT, 100));
-    let _ = c.open_round("Loan A".into(), U64(1000 * NS));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
     c.apply_round_key(1, Ok(json!({ "ok": true, "pubkey": pubkey() })));
     for f in &panel {
         testing_env!(ctx(f, SUB, 200));
@@ -1848,4 +1803,1196 @@ fn one_audit_can_be_read_by_id() {
     let a = c.get_audit(U64(1)).unwrap();
     assert_eq!((a.fund, a.status), (f, AuditStatus::Pending));
     assert!(c.get_audit(U64(2)).is_none());
+}
+
+// ---- v2: the council ----
+
+fn as_member(c: &mut Nema, who: &AccountId, secs: u64, f: impl FnOnce(&mut Nema)) {
+    testing_env!(ctx(who, 0, secs));
+    f(c);
+}
+
+#[test]
+#[should_panic(expected = "3 to 7 different accounts")]
+fn a_council_of_two_is_refused() {
+    testing_env!(ctx(&owner(), 0, 100));
+    let mut ids = council();
+    ids.pop();
+    Nema::new(
+        ids,
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        vec![],
+        vec![],
+    );
+}
+
+#[test]
+#[should_panic(expected = "3 to 7 different accounts")]
+fn a_council_cannot_seat_the_same_account_twice() {
+    testing_env!(ctx(&owner(), 0, 100));
+    Nema::new(
+        vec![owner(), owner(), council2()],
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        vec![],
+        vec![],
+    );
+}
+
+#[test]
+#[should_panic(expected = "majority of the council")]
+fn a_threshold_of_one_is_refused() {
+    testing_env!(ctx(&owner(), 0, 100));
+    build(1, 0, 4);
+}
+
+#[test]
+#[should_panic(expected = "majority of the council")]
+fn a_threshold_below_a_majority_is_refused() {
+    // Two of four is not a majority: two members could act against the other two.
+    testing_env!(ctx(&owner(), 0, 100));
+    let mut four = council();
+    four.push("council4.testnet".parse().unwrap());
+    Nema::new(
+        four,
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        vec![],
+        vec![],
+    );
+}
+
+#[test]
+#[should_panic(expected = "only a council member")]
+fn only_the_council_proposes() {
+    let mut c = fresh();
+    testing_env!(ctx(&accounts(1), 0, 100));
+    c.propose(ProposalKind::SetReadPrice(U128(1)));
+}
+
+#[test]
+#[should_panic(expected = "only a council member")]
+fn only_the_council_votes() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::SetReadPrice(U128(1)));
+    testing_env!(ctx(&accounts(1), 0, 100));
+    c.vote(id);
+}
+
+#[test]
+fn one_council_member_cannot_change_the_price_alone() {
+    let mut c = fresh();
+    c.propose(ProposalKind::SetReadPrice(U128(5)));
+    assert_eq!(c.read_price, PRICE, "one vote of two is not enough");
+    assert_eq!(c.get_proposals().len(), 1);
+}
+
+#[test]
+fn the_threshold_runs_the_proposal_and_clears_it() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::SetReadPrice(U128(5)));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    assert_eq!(c.read_price, 5);
+    assert!(c.get_proposals().is_empty());
+}
+
+#[test]
+#[should_panic(expected = "you already voted")]
+fn a_member_cannot_vote_twice() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::SetReadPrice(U128(5)));
+    c.vote(id);
+}
+
+#[test]
+#[should_panic(expected = "this proposal has lapsed")]
+fn a_proposal_lapses_after_a_week() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::SetReadPrice(U128(5)));
+    as_member(&mut c, &council2(), 100 + 7 * 24 * 3600 + 1, |c| c.vote(id));
+}
+
+#[test]
+fn a_proposal_still_counts_on_the_last_day() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::SetReadPrice(U128(5)));
+    as_member(&mut c, &council2(), 100 + 7 * 24 * 3600, |c| c.vote(id));
+    assert_eq!(c.read_price, 5);
+}
+
+#[test]
+fn the_council_removes_a_fund_by_vote() {
+    let mut c = with_open_round();
+    let id = c.propose(ProposalKind::RemoveMember(funds()[0].clone()));
+    assert!(c.get_members().contains(&funds()[0]));
+    as_member(&mut c, &council2(), 150, |c| c.vote(id));
+    assert!(!c.get_members().contains(&funds()[0]));
+}
+
+#[test]
+#[should_panic(expected = "not a panel member")]
+fn removing_a_stranger_fails_when_proposed() {
+    let mut c = fresh();
+    c.propose(ProposalKind::RemoveMember(
+        "stranger.testnet".parse().unwrap(),
+    ));
+}
+
+#[test]
+fn the_council_seats_and_unseats_members_by_vote() {
+    let mut c = fresh();
+    let newcomer: AccountId = "council4.testnet".parse().unwrap();
+    let id = c.propose(ProposalKind::AddCouncil(newcomer.clone()));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    assert_eq!(c.get_council().len(), 4);
+    assert!(c.get_council().contains(&newcomer));
+
+    // Four seats need three votes; the new member's vote counts, and the old seat can go.
+    let id = c.propose(ProposalKind::RemoveCouncil(council3()));
+    as_member(&mut c, &newcomer, 102, |c| c.vote(id));
+    assert_eq!(c.get_council().len(), 4, "two of four is not a majority");
+    as_member(&mut c, &owner(), 103, |c| c.vote(id));
+    assert_eq!(c.get_council().len(), 3);
+    assert!(!c.get_council().contains(&council3()));
+}
+
+#[test]
+#[should_panic(expected = "fall below its threshold or 3 members")]
+fn the_council_cannot_shrink_below_three() {
+    let mut c = fresh();
+    c.propose(ProposalKind::RemoveCouncil(council3()));
+}
+
+#[test]
+#[should_panic(expected = "already on the council")]
+fn a_council_member_cannot_be_seated_twice() {
+    let mut c = fresh();
+    c.propose(ProposalKind::AddCouncil(council2()));
+}
+
+#[test]
+fn a_removed_council_members_old_vote_no_longer_counts() {
+    let mut c = fresh();
+    // council3 proposes a price change, then is voted off the council.
+    testing_env!(ctx(&council3(), 0, 100));
+    let price = c.propose(ProposalKind::SetReadPrice(U128(9)));
+    let extra: AccountId = "council4.testnet".parse().unwrap();
+    testing_env!(ctx(&owner(), 0, 101));
+    let add = c.propose(ProposalKind::AddCouncil(extra.clone()));
+    as_member(&mut c, &council2(), 102, |c| c.vote(add));
+    testing_env!(ctx(&owner(), 0, 103));
+    let leave = c.propose(ProposalKind::RemoveCouncil(council3()));
+    as_member(&mut c, &council2(), 104, |c| c.vote(leave));
+    as_member(&mut c, &extra, 104, |c| c.vote(leave)); // four seats: three votes
+    assert!(!c.get_council().contains(&council3()));
+    // Three votes on paper (the threshold is now three), but one is from a removed member.
+    as_member(&mut c, &council2(), 105, |c| c.vote(price));
+    as_member(&mut c, &extra, 106, |c| c.vote(price));
+    assert_eq!(
+        c.read_price, PRICE,
+        "a departed member's vote is not counted"
+    );
+    as_member(&mut c, &owner(), 107, |c| c.vote(price));
+    assert_eq!(c.read_price, 9);
+}
+
+// ---- v2: admission with a veto window ----
+
+fn delayed() -> Nema {
+    testing_env!(ctx(&owner(), 0, 100));
+    build(2, 3600, 4)
+}
+
+#[test]
+#[should_panic(expected = "not approved by enough council members yet")]
+fn one_approval_does_not_admit() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), 130, |c| c.approve(applicant()));
+    testing_env!(ctx(&accounts(4), 0, 131));
+    let _ = c.finalize_admission(applicant());
+}
+
+#[test]
+#[should_panic(expected = "you already approved this application")]
+fn a_council_member_approves_once() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), 130, |c| c.approve(applicant()));
+    as_member(&mut c, &owner(), 131, |c| c.approve(applicant()));
+}
+
+#[test]
+#[should_panic(expected = "the veto window is still open")]
+fn the_window_must_pass_before_admission() {
+    let mut c = delayed();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), 130, |c| c.approve(applicant()));
+    as_member(&mut c, &council2(), 131, |c| c.approve(applicant()));
+    testing_env!(ctx(&accounts(4), 0, 131 + 3599));
+    let _ = c.finalize_admission(applicant());
+}
+
+#[test]
+fn anyone_admits_once_the_window_has_passed() {
+    let mut c = delayed();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), 130, |c| c.approve(applicant()));
+    as_member(&mut c, &council2(), 131, |c| c.approve(applicant()));
+    testing_env!(ctx(&accounts(4), 0, 131 + 3600));
+    let _ = c.finalize_admission(applicant());
+    assert!(c.get_members().contains(&applicant()));
+    assert_eq!(refunded_to(&applicant()), BOND);
+}
+
+#[test]
+#[should_panic(expected = "no such application")]
+fn a_veto_inside_the_window_stops_the_admission() {
+    let mut c = delayed();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), 130, |c| c.approve(applicant()));
+    as_member(&mut c, &council2(), 131, |c| c.approve(applicant()));
+    // The third member, who did not approve, rejects it before the window ends.
+    testing_env!(ctx(&council3(), 0, 200));
+    let _ = c.reject(applicant());
+    assert_eq!(refunded_to(&applicant()), BOND, "a vetoed bond comes back");
+    testing_env!(ctx(&accounts(4), 0, 131 + 3600));
+    let _ = c.finalize_admission(applicant());
+}
+
+#[test]
+#[should_panic(expected = "only a council member")]
+fn only_the_council_rejects() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    testing_env!(ctx(&applicant(), 0, 130));
+    let _ = c.reject(applicant());
+}
+
+// ---- v2: any fund opens a round, on a registered loan ----
+
+#[test]
+fn a_panel_fund_opens_a_round_on_a_registered_loan() {
+    let mut c = fresh();
+    c.members.insert(funds()[0].clone());
+    testing_env!(ctx(&funds()[0], DEPOSIT, 100));
+    let _ = c.open_round(U64(2), U64(1000 * NS));
+    let r = c.get_round(U64(1)).unwrap();
+    assert_eq!((r.loan.as_str(), r.loan_id.0), ("Loan B", 2));
+    assert_eq!(r.opened_by, funds()[0]);
+}
+
+#[test]
+fn a_council_member_can_open_a_round_too() {
+    let mut c = fresh();
+    testing_env!(ctx(&council2(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+    assert_eq!(c.get_round(U64(1)).unwrap().opened_by, council2());
+}
+
+#[test]
+#[should_panic(expected = "only panel funds and the council")]
+fn a_stranger_cannot_open_a_round() {
+    let mut c = fresh();
+    testing_env!(ctx(&"stranger.testnet".parse().unwrap(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+}
+
+#[test]
+#[should_panic(expected = "only panel funds and the council")]
+fn an_applicant_cannot_open_a_round() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    testing_env!(ctx(&applicant(), DEPOSIT, 130));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+}
+
+#[test]
+#[should_panic(expected = "no such loan")]
+fn a_round_needs_a_registered_loan() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(99), U64(1000 * NS));
+}
+
+#[test]
+#[should_panic(expected = "a round on this loan is already running")]
+fn one_round_at_a_time_per_loan() {
+    let mut c = with_open_round();
+    testing_env!(ctx(&owner(), DEPOSIT, 150));
+    let _ = c.open_round(U64(1), U64(2000 * NS));
+}
+
+#[test]
+fn two_loans_can_run_rounds_at_once() {
+    let mut c = with_open_round();
+    testing_env!(ctx(&owner(), DEPOSIT, 150));
+    let _ = c.open_round(U64(2), U64(2000 * NS));
+    assert_eq!(c.get_rounds(None, None).len(), 2);
+}
+
+#[test]
+fn a_loan_can_be_re_run_once_its_round_has_ended() {
+    let mut c = published();
+    testing_env!(ctx(&owner(), DEPOSIT, 2000));
+    let _ = c.open_round(U64(1), U64(3000 * NS));
+    assert_eq!(c.get_rounds(None, None).len(), 2);
+}
+
+#[test]
+fn a_failed_round_frees_its_loan() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+    c.apply_round_key(1, Err("enclave down".into()));
+    assert_eq!(status(&c), RoundStatus::Failed);
+    testing_env!(ctx(&owner(), DEPOSIT, 150));
+    let _ = c.open_round(U64(1), U64(2000 * NS));
+}
+
+#[test]
+fn the_registry_grows_by_vote() {
+    let mut c = fresh();
+    assert_eq!(c.get_loans().len(), 2);
+    let id = c.propose(ProposalKind::RegisterLoan("Loan C".into()));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    let loans = c.get_loans();
+    assert_eq!(loans.len(), 3);
+    assert_eq!((loans[2].id.0, loans[2].label.as_str()), (3, "Loan C"));
+}
+
+#[test]
+#[should_panic(expected = "loan label must be 1 to 120 characters")]
+fn an_empty_loan_label_is_refused() {
+    let mut c = fresh();
+    c.propose(ProposalKind::RegisterLoan(String::new()));
+}
+
+#[test]
+fn founding_funds_are_on_the_panel_from_the_start() {
+    testing_env!(ctx(&owner(), 0, 100));
+    let c = Nema::new(
+        council(),
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        funds(),
+        vec!["Loan A".into()],
+    );
+    assert_eq!(c.get_members().len(), 5);
+}
+
+#[test]
+fn a_failed_round_key_leaves_an_event() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+    c.apply_round_key(1, Err("enclave down".into()));
+    assert!(near_sdk::test_utils::get_logs()
+        .iter()
+        .any(|l| l.contains("round_key_failed")));
+}
+
+// ---- v2: no round below the panel minimum ----
+
+#[test]
+#[should_panic(expected = "too few funds on the panel")]
+fn a_round_cannot_open_on_a_panel_below_the_minimum() {
+    near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
+    testing_env!(ctx(&owner(), 0, 100));
+    let mut c = build(2, 0, 4);
+    for f in funds().into_iter().take(3) {
+        c.members.insert(f);
+    }
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+}
+
+#[test]
+fn a_panel_at_the_minimum_can_open_a_round() {
+    near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
+    testing_env!(ctx(&owner(), 0, 100));
+    let mut c = build(2, 0, 4);
+    for f in funds().into_iter().take(4) {
+        c.members.insert(f);
+    }
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+    assert_eq!(c.get_rounds(None, None).len(), 1);
+}
+
+// ---- v2: the council is paid for keeping the panel running ----
+
+/// What the council earns from one paid read, with the share set to `bps`.
+fn council_earned(c: &Nema) -> Vec<u128> {
+    council()
+        .iter()
+        .map(|a| c.get_earnings(a.clone()).0)
+        .collect()
+}
+
+#[test]
+#[should_panic(expected = "at most 20%")]
+fn the_council_share_is_capped() {
+    testing_env!(ctx(&owner(), 0, 100));
+    Nema::new(
+        council(),
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        2_001,
+        vec![],
+        vec![],
+    );
+}
+
+#[test]
+fn a_paid_read_pays_the_council_its_share_and_the_funds_the_rest() {
+    let mut c = published();
+    c.council_share_bps = 1_000; // 10%
+    let id = buy(&mut c);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+
+    let cut = PRICE * 1_000 / 10_000;
+    let per_seat = cut / 3;
+    let pool = PRICE - per_seat * 3;
+    let per_fund = pool / 5;
+    let dust = pool - per_fund * 5;
+    for f in funds() {
+        assert_eq!(c.get_earnings(f).0, per_fund, "each contributing fund");
+    }
+    let seats = council_earned(&c);
+    assert_eq!(seats[1], per_seat);
+    assert_eq!(seats[2], per_seat);
+    assert_eq!(
+        seats[0],
+        per_seat + dust,
+        "the first seat also holds the dust"
+    );
+    let everything: u128 = funds()
+        .iter()
+        .map(|f| c.get_earnings(f.clone()).0)
+        .sum::<u128>()
+        + seats.iter().sum::<u128>();
+    assert_eq!(everything, PRICE, "nothing lost or made");
+}
+
+#[test]
+fn with_no_share_the_funds_split_the_whole_read() {
+    let mut c = published();
+    let id = buy(&mut c);
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    for f in funds() {
+        assert_eq!(c.get_earnings(f).0, PRICE / 5);
+    }
+    assert_eq!(council_earned(&c)[1], 0);
+}
+
+#[test]
+fn a_free_read_pays_the_council_nothing() {
+    let mut c = published();
+    c.council_share_bps = 2_000;
+    testing_env!(ctx(
+        &funds()[0],
+        READ - MIN_OUTLAYER_DEPOSIT + MIN_OUTLAYER_DEPOSIT,
+        1100
+    ));
+    let _ = c.claim_read(1, pubkey());
+    let id = c.get_purchases_of(funds()[0].clone()).last().unwrap().id.0;
+    let h = set_hash(&c);
+    c.apply_delivery(id, Ok(good_delivery(&h)));
+    assert_eq!(council_earned(&c), vec![0, 0, 0]);
+}
+
+#[test]
+fn the_council_share_never_loses_or_creates_a_yocto() {
+    for bps in [0u32, 1, 333, 1_000, 2_000] {
+        for n in 4..=9usize {
+            let contributors: Vec<AccountId> = (0..n)
+                .map(|i| format!("f{i}.testnet").parse().unwrap())
+                .collect();
+            for price in [
+                1u128,
+                7,
+                99,
+                10_000,
+                PRICE,
+                PRICE * 7 + 11,
+                u64::MAX as u128,
+                u128::MAX / 20_000,
+            ] {
+                let mut c = fresh();
+                c.council_share_bps = bps;
+                c.credit_contributors(&contributors, price);
+                let to_funds: u128 = contributors
+                    .iter()
+                    .map(|a| c.get_earnings(a.clone()).0)
+                    .sum();
+                let to_council: u128 = council_earned(&c).iter().sum();
+                assert_eq!(
+                    to_funds + to_council,
+                    price,
+                    "bps={bps} n={n} price={price}"
+                );
+                // The council gets its share plus at most the dust of the split.
+                let cut = price / 10_000 * bps as u128 + (price % 10_000) * bps as u128 / 10_000;
+                assert!(
+                    to_council <= cut + n as u128,
+                    "bps={bps} n={n} price={price}"
+                );
+            }
+        }
+    }
+}
+
+// ---- v2: when the council goes quiet ----
+
+fn new_council() -> Vec<AccountId> {
+    ["n1.testnet", "n2.testnet", "n3.testnet"]
+        .iter()
+        .map(|a| a.parse().unwrap())
+        .collect()
+}
+
+/// The first second at which a council created at t=100s counts as silent.
+const QUIET: u64 = 100 + DORMANT_SECS;
+const FORTNIGHT: u64 = 14 * 24 * 3600;
+
+fn start_takeover(c: &mut Nema, who: &AccountId, secs: u64) {
+    testing_env!(ctx(who, 0, secs));
+    c.propose_council_takeover(new_council(), 2);
+}
+
+fn takeover_vote(c: &mut Nema, who: &AccountId, secs: u64) {
+    testing_env!(ctx(who, 0, secs));
+    c.vote_council_takeover();
+}
+
+#[test]
+#[should_panic(expected = "the council has made a decision recently")]
+fn a_takeover_needs_a_silent_council() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET - 1);
+}
+
+#[test]
+fn a_takeover_can_start_once_the_council_has_been_silent_long_enough() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    let t = c.get_takeover().expect("a vote is running");
+    assert_eq!((t.votes.len(), t.council), (1, new_council()));
+}
+
+#[test]
+#[should_panic(expected = "only a panel fund can do this")]
+fn only_a_panel_fund_can_propose_a_takeover() {
+    let mut c = fresh();
+    start_takeover(&mut c, &council2(), QUIET);
+}
+
+#[test]
+#[should_panic(expected = "only a panel fund can do this")]
+fn only_a_panel_fund_can_vote_on_a_takeover() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &"stranger.testnet".parse().unwrap(), QUIET + 1);
+}
+
+#[test]
+fn two_thirds_of_the_panel_replace_the_council() {
+    let mut c = fresh(); // four funds: three votes are two thirds
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + 1);
+    assert_eq!(c.get_council(), council(), "two of four is not enough");
+    takeover_vote(&mut c, &funds()[2], QUIET + 2);
+    assert_eq!(c.get_council(), new_council());
+    assert!(c.get_takeover().is_none());
+}
+
+#[test]
+#[should_panic(expected = "only a council member")]
+fn the_replaced_council_loses_its_powers() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + 1);
+    takeover_vote(&mut c, &funds()[2], QUIET + 2);
+    testing_env!(ctx(&owner(), 0, QUIET + 3));
+    c.propose(ProposalKind::SetReadPrice(U128(1)));
+}
+
+#[test]
+fn the_new_council_can_act() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + 1);
+    takeover_vote(&mut c, &funds()[2], QUIET + 2);
+    let n = new_council();
+    as_member(&mut c, &n[0], QUIET + 3, |c| {
+        c.propose(ProposalKind::SetReadPrice(U128(7)));
+    });
+    as_member(&mut c, &n[1], QUIET + 4, |c| c.vote(U64(1)));
+    assert_eq!(c.read_price, 7);
+}
+
+#[test]
+#[should_panic(expected = "you already voted")]
+fn a_fund_votes_on_a_takeover_once() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[0], QUIET + 1);
+}
+
+#[test]
+#[should_panic(expected = "no vote to replace the council is running")]
+fn the_council_deciding_kills_a_takeover() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    // The council wakes up and decides something before the panel finishes.
+    as_member(&mut c, &owner(), QUIET + 5, |c| {
+        c.propose(ProposalKind::Heartbeat);
+    });
+    as_member(&mut c, &council2(), QUIET + 6, |c| c.vote(U64(1)));
+    assert!(c.get_takeover().is_none());
+    takeover_vote(&mut c, &funds()[1], QUIET + 7);
+}
+
+#[test]
+#[should_panic(expected = "the council has made a decision recently")]
+fn a_heartbeat_restarts_the_clock() {
+    let mut c = fresh();
+    as_member(&mut c, &owner(), QUIET - 10, |c| {
+        c.propose(ProposalKind::Heartbeat);
+    });
+    as_member(&mut c, &council2(), QUIET - 9, |c| c.vote(U64(1)));
+    assert_eq!(c.read_price, PRICE, "a heartbeat changes nothing else");
+    start_takeover(&mut c, &funds()[0], QUIET);
+}
+
+#[test]
+fn one_member_acting_alone_does_not_count_as_a_decision() {
+    // A lone proposal that never reaches the threshold must not reset the clock, or
+    // one absent-minded seat could keep a dead council alive forever.
+    let mut c = fresh();
+    as_member(&mut c, &owner(), QUIET - 10, |c| {
+        c.propose(ProposalKind::SetReadPrice(U128(1)));
+    });
+    assert_eq!(c.read_price, PRICE);
+    start_takeover(&mut c, &funds()[0], QUIET);
+    assert!(
+        c.get_takeover().is_some(),
+        "the lone proposal did not stop the takeover"
+    );
+}
+
+#[test]
+#[should_panic(expected = "the council has made a decision recently")]
+fn an_admission_reaching_its_threshold_counts_as_a_decision() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), QUIET - 50, |c| c.approve(applicant()));
+    as_member(&mut c, &council2(), QUIET - 49, |c| c.approve(applicant()));
+    start_takeover(&mut c, &funds()[0], QUIET);
+}
+
+#[test]
+#[should_panic(expected = "no vote to replace the council is running")]
+fn a_takeover_lapses_after_two_weeks() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + FORTNIGHT + 1);
+}
+
+#[test]
+fn a_takeover_still_counts_on_its_last_day() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + FORTNIGHT);
+    assert_eq!(c.get_takeover().unwrap().votes.len(), 2);
+}
+
+#[test]
+fn a_lapsed_takeover_can_be_started_again() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    start_takeover(&mut c, &funds()[1], QUIET + FORTNIGHT + 1);
+    assert_eq!(c.get_takeover().unwrap().proposer, funds()[1]);
+}
+
+#[test]
+#[should_panic(expected = "a vote to replace the council is already running")]
+fn only_one_takeover_runs_at_a_time() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    start_takeover(&mut c, &funds()[1], QUIET + 1);
+}
+
+#[test]
+#[should_panic(expected = "the council has made a decision recently")]
+fn a_new_council_is_not_replaceable_at_once() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + 1);
+    takeover_vote(&mut c, &funds()[2], QUIET + 2);
+    start_takeover(&mut c, &funds()[0], QUIET + 3);
+}
+
+#[test]
+#[should_panic(expected = "3 to 7 different accounts")]
+fn a_replacement_council_needs_three_members() {
+    let mut c = fresh();
+    testing_env!(ctx(&funds()[0], 0, QUIET));
+    c.propose_council_takeover(new_council()[..2].to_vec(), 2);
+}
+
+#[test]
+#[should_panic(expected = "majority of the council")]
+fn a_replacement_council_needs_a_majority_threshold() {
+    let mut c = fresh();
+    testing_env!(ctx(&funds()[0], 0, QUIET));
+    c.propose_council_takeover(new_council(), 1);
+}
+
+#[test]
+fn a_removed_funds_vote_does_not_count() {
+    let mut c = fresh(); // four funds: three live votes needed
+    c.takeover = Some(Takeover {
+        council: new_council(),
+        threshold: 2,
+        proposer: funds()[0].clone(),
+        // Three votes, but one is from an account that is not on the panel.
+        votes: vec![
+            funds()[0].clone(),
+            funds()[1].clone(),
+            "gone.testnet".parse().unwrap(),
+        ],
+        created_at: U64(QUIET * NS),
+    });
+    c.run_takeover_if_passed();
+    assert_eq!(
+        c.get_council(),
+        council(),
+        "a departed fund vote is not counted"
+    );
+}
+
+#[test]
+#[should_panic(expected = "at least a day of silence")]
+fn a_council_must_be_allowed_a_day_of_silence() {
+    testing_env!(ctx(&owner(), 0, 100));
+    Nema::new(
+        council(),
+        2,
+        0,
+        24 * 3600 - 1,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        vec![],
+        vec![],
+    );
+}
+
+// ---- v2: the threshold stays a majority ----
+
+fn seat_a_fourth(c: &mut Nema) -> AccountId {
+    let newcomer: AccountId = "council4.testnet".parse().unwrap();
+    let id = c.propose(ProposalKind::AddCouncil(newcomer.clone()));
+    as_member(c, &council2(), 101, |c| c.vote(id));
+    newcomer
+}
+
+#[test]
+fn adding_a_seat_keeps_the_threshold_a_majority() {
+    let mut c = fresh();
+    seat_a_fourth(&mut c);
+    assert_eq!((c.get_council().len(), c.threshold), (4, 3));
+    // Two of four can no longer decide.
+    testing_env!(ctx(&owner(), 0, 102));
+    let id = c.propose(ProposalKind::SetReadPrice(U128(9)));
+    as_member(&mut c, &council2(), 102, |c| c.vote(id));
+    assert_eq!(c.read_price, PRICE);
+}
+
+#[test]
+fn the_council_can_raise_its_threshold_by_vote() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::SetThreshold(3));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    assert_eq!(c.threshold, 3);
+}
+
+#[test]
+#[should_panic(expected = "majority of the council")]
+fn a_threshold_below_a_majority_cannot_be_voted_in() {
+    let mut c = fresh();
+    seat_a_fourth(&mut c);
+    testing_env!(ctx(&owner(), 0, 102));
+    c.propose(ProposalKind::SetThreshold(2));
+}
+
+#[test]
+fn a_shrunk_council_can_lower_its_threshold_back() {
+    // Four seats at three votes, one leaves: three of three until the council
+    // votes the threshold back to two.
+    let mut c = fresh();
+    let newcomer = seat_a_fourth(&mut c);
+    testing_env!(ctx(&owner(), 0, 102));
+    let id = c.propose(ProposalKind::RemoveCouncil(council3()));
+    as_member(&mut c, &council2(), 102, |c| c.vote(id));
+    as_member(&mut c, &newcomer, 103, |c| c.vote(id));
+    assert_eq!((c.get_council().len(), c.threshold), (3, 3));
+    testing_env!(ctx(&owner(), 0, 104));
+    let id = c.propose(ProposalKind::SetThreshold(2));
+    as_member(&mut c, &council2(), 104, |c| c.vote(id));
+    as_member(&mut c, &newcomer, 105, |c| c.vote(id));
+    assert_eq!(c.threshold, 2);
+}
+
+#[test]
+fn an_approval_from_a_departed_council_member_does_not_count() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    as_member(&mut c, &council3(), 125, |c| c.approve(applicant()));
+    // council3 leaves; its approval stays on the application but must not count.
+    c.council = vec![owner(), council2(), "council4.testnet".parse().unwrap()];
+    as_member(&mut c, &owner(), 126, |c| c.approve(applicant()));
+    assert!(
+        c.get_applications()[0].ready_at.is_none(),
+        "one live approval of two"
+    );
+    as_member(&mut c, &council2(), 127, |c| c.approve(applicant()));
+    assert!(c.get_applications()[0].ready_at.is_some());
+}
+
+// ---- v2: lapsed proposals ----
+
+const WEEK: u64 = 7 * 24 * 3600;
+
+#[test]
+fn a_lapsed_proposal_is_not_listed() {
+    let mut c = fresh();
+    c.propose(ProposalKind::SetReadPrice(U128(5)));
+    testing_env!(ctx(&owner(), 0, 100 + WEEK + 1));
+    assert!(c.get_proposals().is_empty());
+}
+
+#[test]
+fn a_lapsed_proposal_is_cleared_from_storage_by_the_next_one() {
+    let mut c = fresh();
+    c.propose(ProposalKind::SetReadPrice(U128(5)));
+    as_member(&mut c, &owner(), 100 + WEEK + 1, |c| {
+        c.propose(ProposalKind::SetReadPrice(U128(6)));
+    });
+    assert_eq!(c.proposals.len(), 1);
+}
+
+#[test]
+fn a_live_proposal_is_kept_when_another_is_made() {
+    let mut c = fresh();
+    c.propose(ProposalKind::SetReadPrice(U128(5)));
+    as_member(&mut c, &owner(), 100 + WEEK, |c| {
+        c.propose(ProposalKind::SetReadPrice(U128(6)));
+    });
+    assert_eq!(c.get_proposals().len(), 2);
+}
+
+// ---- v2: taking loans off the registry ----
+
+#[test]
+fn the_council_removes_a_loan_by_vote() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::RemoveLoan(U64(1)));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    let loans = c.get_loans();
+    assert_eq!((loans.len(), loans[0].id.0), (1, 2));
+}
+
+#[test]
+#[should_panic(expected = "no such loan")]
+fn a_removed_loan_cannot_get_a_round() {
+    let mut c = fresh();
+    let id = c.propose(ProposalKind::RemoveLoan(U64(1)));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    testing_env!(ctx(&owner(), DEPOSIT, 102));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+}
+
+#[test]
+#[should_panic(expected = "a round on this loan is still running")]
+fn a_loan_with_a_running_round_cannot_be_removed() {
+    let mut c = with_open_round();
+    testing_env!(ctx(&owner(), 0, 150));
+    c.propose(ProposalKind::RemoveLoan(U64(1)));
+}
+
+#[test]
+fn a_past_round_keeps_its_label_after_the_loan_is_removed() {
+    let mut c = published();
+    testing_env!(ctx(&owner(), 0, 2000));
+    let id = c.propose(ProposalKind::RemoveLoan(U64(1)));
+    as_member(&mut c, &council2(), 2001, |c| c.vote(id));
+    assert_eq!(c.get_round(U64(1)).unwrap().loan, "Loan A");
+}
+
+fn full_registry() -> Nema {
+    near_sdk::mock::with_mocked_blockchain(|b| drop(b.take_storage()));
+    testing_env!(ctx(&owner(), 0, 100));
+    Nema::new(
+        council(),
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        vec![],
+        (1..=64).map(|i| format!("Loan {i}")).collect(),
+    )
+}
+
+#[test]
+#[should_panic(expected = "the loan registry is full")]
+fn a_full_registry_refuses_a_new_loan() {
+    let mut c = full_registry();
+    c.propose(ProposalKind::RegisterLoan("Loan 65".into()));
+}
+
+#[test]
+fn removing_a_loan_makes_room_in_a_full_registry() {
+    let mut c = full_registry();
+    let id = c.propose(ProposalKind::RemoveLoan(U64(1)));
+    as_member(&mut c, &council2(), 101, |c| c.vote(id));
+    testing_env!(ctx(&owner(), 0, 102));
+    let id = c.propose(ProposalKind::RegisterLoan("Loan 65".into()));
+    as_member(&mut c, &council2(), 102, |c| c.vote(id));
+    let loans = c.get_loans();
+    assert_eq!(loans.len(), 64);
+    assert!(loans.iter().any(|l| l.id.0 == 65 && l.label == "Loan 65"));
+}
+
+#[test]
+fn a_read_split_matches_the_sites_vector() {
+    // The same numbers are checked against the site's `splitRead` in
+    // web/scripts/check-crypto.ts, so the price breakdown shown matches what is paid.
+    let mut c = fresh();
+    c.council_share_bps = 500;
+    let funds4: Vec<AccountId> = funds().into_iter().take(4).collect();
+    c.credit_contributors(&funds4, 100_000_000_000_000_000_000_007);
+    let earned = |a: &AccountId| c.earnings.get(a).copied().unwrap_or(0);
+    assert_eq!(earned(&council2()), 1_666_666_666_666_666_666_666);
+    assert_eq!(earned(&funds4[0]), 23_750_000_000_000_000_000_002);
+    // The first seat also holds the one yocto that does not divide.
+    assert_eq!(earned(&owner()), 1_666_666_666_666_666_666_667);
+}
+
+// ---- v2: fixes from the reliability audit ----
+
+const MONTH: u64 = 30 * 24 * 3600;
+
+#[test]
+#[should_panic(expected = "a round can stay open at most 30 days")]
+fn a_round_cannot_hold_its_loan_for_more_than_30_days() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64((100 + MONTH + 1) * NS));
+}
+
+#[test]
+fn a_round_can_run_for_exactly_30_days() {
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64((100 + MONTH) * NS));
+    assert_eq!(c.get_rounds(None, None).len(), 1);
+}
+
+#[test]
+#[should_panic(expected = "a round on this loan is already running")]
+fn an_old_running_round_still_holds_its_loan() {
+    // However many rounds were opened since, the loan's own round still counts.
+    let mut c = fresh();
+    testing_env!(ctx(&owner(), DEPOSIT, 100));
+    let _ = c.open_round(U64(1), U64(1000 * NS));
+    c.next_round_id += 500;
+    let _ = c.open_round(U64(1), U64(2000 * NS));
+}
+
+#[test]
+#[should_panic(expected = "you have 4 proposals open")]
+fn one_council_member_holds_at_most_four_open_proposals() {
+    let mut c = fresh();
+    for price in 1..=5 {
+        c.propose(ProposalKind::SetReadPrice(U128(price)));
+    }
+}
+
+#[test]
+fn another_member_can_still_propose_when_one_is_at_the_limit() {
+    let mut c = fresh();
+    for price in 1..=4 {
+        c.propose(ProposalKind::SetReadPrice(U128(price)));
+    }
+    as_member(&mut c, &council2(), 101, |c| {
+        c.propose(ProposalKind::Heartbeat);
+    });
+    assert_eq!(c.read_price, PRICE);
+}
+
+#[test]
+fn a_proposal_that_went_stale_fails_cleanly_on_its_last_vote() {
+    // Two proposals for the same loan: the first registers it, so the second can no
+    // longer run. Its last vote lands, the proposal is dropped and an event says why.
+    let mut c = fresh();
+    let first = c.propose(ProposalKind::RegisterLoan("Loan C".into()));
+    let second = c.propose(ProposalKind::RegisterLoan("Loan C".into()));
+    as_member(&mut c, &council2(), 101, |c| c.vote(first));
+    as_member(&mut c, &council2(), 102, |c| c.vote(second));
+    assert_eq!(c.get_loans().len(), 3);
+    assert!(c.get_proposals().is_empty());
+    assert!(near_sdk::test_utils::get_logs()
+        .iter()
+        .any(|l| l.contains("proposal_failed") && l.contains("already registered")));
+}
+
+#[test]
+fn a_lapsed_proposal_leaves_an_event_when_cleared() {
+    let mut c = fresh();
+    c.propose(ProposalKind::SetReadPrice(U128(5)));
+    as_member(&mut c, &owner(), 100 + WEEK + 1, |c| {
+        c.propose(ProposalKind::Heartbeat);
+    });
+    assert!(near_sdk::test_utils::get_logs()
+        .iter()
+        .any(|l| l.contains("proposal_lapsed")));
+}
+
+#[test]
+#[should_panic(expected = "this loan is already registered")]
+fn the_same_loan_cannot_be_registered_twice() {
+    let mut c = fresh();
+    c.propose(ProposalKind::RegisterLoan("Loan A".into()));
+}
+
+#[test]
+#[should_panic(expected = "too few funds on the panel to replace the council")]
+fn a_takeover_needs_a_panel_at_the_minimum() {
+    let mut c = fresh();
+    c.members.remove(&funds()[3]);
+    start_takeover(&mut c, &funds()[0], QUIET);
+}
+
+#[test]
+fn a_takeover_does_not_pass_once_the_panel_falls_below_the_minimum() {
+    let mut c = fresh();
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + 1);
+    c.members.remove(&funds()[3]);
+    takeover_vote(&mut c, &funds()[2], QUIET + 2);
+    assert_eq!(
+        c.get_council(),
+        council(),
+        "three funds can't speak for the panel"
+    );
+}
+
+#[test]
+fn a_new_council_starts_without_the_old_ones_proposals_or_approvals() {
+    let mut c = fresh();
+    apply_now(&mut c);
+    as_member(&mut c, &owner(), QUIET - 20, |c| c.approve(applicant()));
+    as_member(&mut c, &owner(), QUIET - 10, |c| {
+        c.propose(ProposalKind::SetReadPrice(U128(1)));
+    });
+    start_takeover(&mut c, &funds()[0], QUIET);
+    takeover_vote(&mut c, &funds()[1], QUIET + 1);
+    takeover_vote(&mut c, &funds()[2], QUIET + 2);
+    assert_eq!(c.get_council(), new_council());
+    assert!(c.get_proposals().is_empty());
+    let app = &c.get_applications()[0];
+    assert!(app.approvals.is_empty() && app.ready_at.is_none());
+}
+
+#[test]
+fn a_seat_that_leaves_takes_its_votes_and_approvals_with_it() {
+    let mut c = fresh();
+    let newcomer = seat_a_fourth(&mut c);
+    apply_now(&mut c);
+    as_member(&mut c, &council3(), 125, |c| c.approve(applicant()));
+    testing_env!(ctx(&council3(), 0, 126));
+    let price = c.propose(ProposalKind::SetReadPrice(U128(9)));
+    testing_env!(ctx(&owner(), 0, 127));
+    let leave = c.propose(ProposalKind::RemoveCouncil(council3()));
+    as_member(&mut c, &council2(), 128, |c| c.vote(leave));
+    as_member(&mut c, &newcomer, 129, |c| c.vote(leave));
+    assert!(!c.get_council().contains(&council3()));
+    assert!(c.proposals.get(&price.0).unwrap().votes.is_empty());
+    assert!(c.get_applications()[0].approvals.is_empty());
+}
+
+#[test]
+#[should_panic(expected = "this loan is already registered")]
+fn the_founding_registry_cannot_list_a_loan_twice() {
+    testing_env!(ctx(&owner(), 0, 100));
+    Nema::new(
+        council(),
+        2,
+        0,
+        DORMANT_SECS,
+        "o.testnet".parse().unwrap(),
+        "p".into(),
+        "s.testnet".parse().unwrap(),
+        "d".into(),
+        4,
+        U128(PRICE),
+        0,
+        vec![],
+        vec!["Loan A".into(), "Loan A".into()],
+    );
 }

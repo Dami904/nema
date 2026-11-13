@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { PrivateKey, decrypt } from "eciesjs";
 import { base58ToHex, commitment, fromHex, setHash } from "../src/lib/hashes.ts";
 import { openSealed, sealMark } from "../src/lib/keys.ts";
+import { splitRead } from "../src/lib/split.ts";
 
 const expected = readFileSync(new URL("../../testdata/set_hash_vector.txt", import.meta.url), "utf8").trim();
 const got = await setHash([
@@ -37,3 +38,12 @@ const inner = JSON.parse(new TextDecoder().decode(decrypt(roundKey.secret, fromH
 if (inner.account !== "fund1.testnet" || inner.mark !== 9425) throw new Error(`sealed mark shape: ${JSON.stringify(inner)}`);
 if (sealed.length < 64 || sealed.length > 2048) throw new Error(`sealed mark length ${sealed.length} outside the contract's 64..2048`);
 console.log(`sealed mark opens to ${JSON.stringify(inner)} (${sealed.length} hex chars, within the contract's limit)`);
+
+// A read fee splits the way the contract pays it. The same vector is in the contract
+// test `a_read_split_matches_the_sites_vector`.
+const split = splitRead(10n ** 23n + 7n, 4, 3, 500);
+const want = { perSeat: 1666666666666666666666n, perFund: 23750000000000000000002n, remainder: 1n };
+if (split.perSeat !== want.perSeat || split.perFund !== want.perFund || split.remainder !== want.remainder)
+  throw new Error(`read split: ${split.perSeat} ${split.perFund} ${split.remainder}`);
+if (split.perSeat * 3n + split.perFund * 4n + split.remainder !== 10n ** 23n + 7n) throw new Error("read split loses or makes yocto");
+console.log("a read fee splits as the contract pays it (council share, funds, remainder)");

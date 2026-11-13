@@ -58,6 +58,7 @@ browser a moment ago" and point back at the ✓ marks. Don't debug on stage.
 from OutLayer's API. Say "the same checks run from a terminal" and go straight to
 the `check-attest` step.
 
-**Asked "what if the owner redeploys?"** Answer straight: today the owner key
-could, and that is the top item in [THREAT_MODEL.md](THREAT_MODEL.md); removing
-the key after the final deploy closes it.
+**Asked "what if someone redeploys the contract?"** Answer straight: the council
+can't, but whoever holds the contract account's full-access key could, and that is
+the top item in [THREAT_MODEL.md](THREAT_MODEL.md); removing the key after the
+final deploy closes it.

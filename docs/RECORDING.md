@@ -11,12 +11,12 @@ The clips follow one real round, from four points of view:
 | 1–5 | **A fund** (`nemalender.testnet` joins the panel) | The live run, after problem/solution |
 | 6 | **Its auditor** (`nemaauditor.testnet`) | Who can use it |
 | 7 | **Anyone, no wallet** (the public verifier) | What stays private |
-| 8 | **The owner** (Sample mode) | Who can use it |
+| 8 | **The council** (Sample mode) | Who can use it |
 | — | **A lender** | Already recorded (purchase #10) |
 | 9 | **Backup** (Sample mode) | Only if a live clip fails |
 
 Steps marked **Claude** are mine. I sign them from the terminal with the
-owner and the test funds' keys. You never handle those keys, and your wallets
+council seats' and the test funds' keys. You never handle those keys, and your wallets
 never show them. Send me "go" at each **Claude** step, then wait for "done".
 
 ## Before you record
@@ -43,7 +43,7 @@ Connect `nemalender.testnet`. Go to **Panel**. Show the panel of four funds and
 the read-only note. Under **Join the panel**, put `nemaauditor.testnet` in
 **Auditor**, add a note (say "Credit fund, private loans"), and press
 **Apply · 0.05 NEAR bond, returned**. Approve in the wallet. Stop on **Waiting on
-the owner**. Tell me "applied".
+the council**. Tell me "applied".
 
 > **Claude:** `pnpm live:demo-round approve --account nemalender.testnet`
 > then `pnpm live:demo-round open --minutes 20` (round 7, closes in 20 minutes).
@@ -96,13 +96,13 @@ Then open https://testnet.nearblocks.io/address/nema-dev.testnet?tab=contract:
 the contract shows as verified (SourceScan). Leave out blank tabs and loading
 screens. Pause on each page only once it has loaded.
 
-## Clip 8. The owner (Sample mode, about 40 s)
+## Clip 8. The council (Sample mode, about 40 s)
 
-Press **Sample**, then **Viewing as → Owner**. Go to **Panel**: the funds on
-the panel, the applications with **Admit** / **Turn away**, the form to open a
-round, and the read price. Hover over the buttons, but don't press them: Sample
-only answers "nothing was sent" for owner actions. The caption will say "sample
-data". Only the owner key can do this live, and clip 2 already shows the real
+Press **Sample**, then **Viewing as → Council**. Go to **Panel**: the funds on
+the panel, the applications with **Approve** / **Turn away**, the form to open a
+round, the council's decisions and seats, the read price and the loan registry. Hover over the buttons, but don't press them: Sample
+only answers "nothing was sent" for council actions. The caption will say "sample
+data". Only council seats can do this live, and clip 2 already shows the real
 result.
 
 ## Clip 9. Backup (Sample mode, about 90 s)

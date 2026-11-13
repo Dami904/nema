@@ -7,6 +7,7 @@ import { Settle } from "../components/Settle";
 import { useToast } from "../components/Toaster";
 import { useAccount } from "../lib/account";
 import { useChain, useLoad, useNow } from "../lib/chain";
+import { splitRead } from "../lib/split";
 import { CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, STORAGE_DEPOSIT_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../lib/config";
 import { date, handle, near, nsToMs, short } from "../lib/format";
 import { commitment, setHash, sha256Hex } from "../lib/hashes";
@@ -164,7 +165,7 @@ function FundView({ round, isMember }: { round: RoundT; isMember: boolean }) {
       </Empty>
     );
   if (!isMember)
-    return <Empty title="Not on the panel">{handle(accountId)} isn't a panel fund. Only funds the owner has admitted can mark a round.</Empty>;
+    return <Empty title="Not on the panel">{handle(accountId)} isn't a panel fund. Only funds the council has admitted can mark a round.</Empty>;
   if (round.status !== "Open")
     return (
       <div className="card fadein">
@@ -250,8 +251,8 @@ function LenderView({ round }: { round: RoundT }) {
 
   const price = config ? BigInt(config.read_price) : 0n;
   const contributors = round.listing?.contributors.length ?? 0;
-  const share = contributors ? price / BigInt(contributors) : 0n;
-  const remainder = price - share * BigInt(contributors);
+  const seats = config?.council?.length ?? 0;
+  const split = splitRead(price, contributors, seats, config?.council_share_bps ?? 0);
 
   const buy = async () => {
     if (!accountId) return signIn();
@@ -331,8 +332,9 @@ function LenderView({ round }: { round: RoundT }) {
             <>
               <Fees total={price + READ_EXTRA_YOCTO}>
                 <dt>Read price</dt><dd>{near(price)}</dd>
-                <dt>To each of {contributors} funds</dt><dd>{near(share)}</dd>
-                {remainder > 0n && (<><dt>Rounding, to the owner</dt><dd>{near(remainder)}</dd></>)}
+                <dt>To each of {contributors} funds</dt><dd>{near(split.perFund)}</dd>
+                {split.perSeat > 0n && (<><dt>To each of {seats} council seats</dt><dd>{near(split.perSeat)}</dd></>)}
+                {split.remainder > 0n && (<><dt>Rounding, to the first council seat</dt><dd>{split.remainder < 10n ** 20n ? "under 0.0001 NEAR" : near(split.remainder)}</dd></>)}
                 <dt>Enclave fee (OutLayer)</dt><dd>{near(ENCLAVE_FEE_YOCTO)}</dd>
                 <dt>Storage, kept by the contract</dt><dd>{near(STORAGE_DEPOSIT_YOCTO)}</dd>
               </Fees>

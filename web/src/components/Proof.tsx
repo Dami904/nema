@@ -20,8 +20,7 @@ export function EnclaveProof({ round }: { round: Round }) {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
-  const owner = config?.owner;
-  const ready = !!owner && purchases !== undefined && audits !== undefined;
+  const ready = !!config && purchases !== undefined && audits !== undefined;
   // Only things that can add or change a run; the chain poll alone shouldn't re-check.
   const key = [round.id, round.status, round.closed_by, accountId, purchases?.length, audits?.length, attempt].join("|");
 
@@ -34,7 +33,7 @@ export function EnclaveProof({ round }: { round: Round }) {
     let alive = true;
     setRuns(null);
     setError(null);
-    const accounts = [owner!, round.closed_by, accountId].filter((a): a is string => !!a);
+    const accounts = [round.opened_by, round.closed_by, accountId].filter((a): a is string => !!a);
     runsForRound(round, accounts, { purchases: purchases ?? [], audits: audits ?? [] })
       .then((r) => alive && setRuns(r))
       .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));

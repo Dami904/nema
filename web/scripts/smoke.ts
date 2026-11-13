@@ -3,11 +3,11 @@
 // private on chain. Every transaction is real and signed with NEAR CLI from the
 // OS keychain.
 //
-// Add --drop to test the other path: the owner removes the last fund after it
+// Add --drop to test the other path: the council removes the last fund after it
 // submits, so its mark is dropped at close, the round fails with too few marks,
-// and the closer's deposit comes back. The fund is put back on the panel after.
+// and the closer's deposit comes back. The fund applies again and the council puts it back after.
 //
-//   pnpm live:smoke --owner nema-dev.testnet --funds fund1.nema-dev.testnet,fund2...,fund3...,fund4... \
+//   pnpm live:smoke --opener nema-dev.testnet --funds fund1.nema-dev.testnet,fund2...,fund3...,fund4... \
 //                    --lender lender.nema-dev.testnet --minutes 4
 //
 // Add --round <id> to pick up a round this script already opened and published
@@ -23,11 +23,13 @@ import { encodeLoan } from "../src/lib/loan";
 import { viewAccount } from "../src/lib/near";
 import { openAudit, openSealed, sealMark } from "../src/lib/keys";
 import type { AuditCopy, Basis, Config, Purchase, Round, Submission } from "../src/lib/types";
-import { allRounds, arg, call, sleep, until, view } from "./cli";
+import { splitRead } from "../src/lib/split";
+import { allRounds, applyAndAdmit, arg, BASE, call, decide, FUNDS, LENDER, registerLoan, sleep, until, view } from "./cli";
 
-const owner = arg("owner", CONFIG.contract);
-const funds = arg("funds", [1, 2, 3, 4].map((n) => `fund${n}.${CONFIG.contract}`).join(",")).split(",");
-const lender = arg("lender", `lender.${CONFIG.contract}`);
+/** Opens the round: any panel fund or council member may. */
+const opener = arg("opener", BASE);
+const funds = arg("funds", FUNDS.join(",")).split(",");
+const lender = arg("lender", LENDER);
 const minutes = Number(arg("minutes", "4"));
 const resume = arg("round", "");
 const drop = process.argv.includes("--drop");
@@ -80,7 +82,8 @@ const closesAt = BigInt(Date.now() + minutes * 60_000) * 1_000_000n;
 // A label no other round has, so the new round is found by name rather than by
 // guessing its id (someone else may open a round at the same time).
 const loan = encodeLoan({ borrower: "Smoke Test Co", facility: `Term loan ${Date.now().toString(36)}`, maturity: "2030-12-31" });
-call(owner, "open_round", { loan, closes_at: closesAt.toString() }, ENCLAVE_FEE_YOCTO, 300);
+const loanId = await registerLoan(loan);
+call(opener, "open_round", { loan_id: loanId, closes_at: closesAt.toString() }, ENCLAVE_FEE_YOCTO, 300);
 const created = await until("the new round", async () => (await allRounds()).find((r) => !before.has(r.id) && r.loan === loan), (r) => !!r, 60_000);
 id = created!.id;
 const open = await until("the round key", () => view<Round | null>("get_round", { round_id: id }), (r) => !!r && r.status !== "AwaitingKey", 180_000);
@@ -102,13 +105,13 @@ if (wait > 0) {
 }
 if (drop) {
   const removed = funds[funds.length - 1];
-  call(owner, "remove_member", { account: removed });
+  await decide({ RemoveMember: removed });
   const balance = async () => BigInt((await viewAccount(funds[0])).amount);
   const before = await balance();
   try {
     call(funds[0], "close_round", { round_id: Number(id) }, ENCLAVE_FEE_YOCTO, 300);
   } finally {
-    call(owner, "add_member", { account: removed });
+    await applyAndAdmit(removed);
   }
   const failedRound = await view<Round>("get_round", { round_id: id });
   check("the removed fund's mark was dropped at close", (await view<Submission[]>("get_submissions", { round_id: id })).every((s) => s.account !== removed));
@@ -157,13 +160,24 @@ try {
 check("a fund gets one free copy per round", twice);
 
 // ---- a lender pays, and the funds are paid ----
-const earned = await Promise.all(funds.map((f) => view<string>("get_earnings", { account: f })));
+const earnedBy = (accounts: string[]) => Promise.all(accounts.map((a) => view<string>("get_earnings", { account: a })));
+const seats = config.council;
+const earned = await earnedBy(funds);
+const seatsBefore = await earnedBy(seats);
 const paid = await read(lender, "buy_read", BigInt(config.read_price) + READ_EXTRA_YOCTO);
 check("the lender's paid read was delivered", paid.p.status === "Delivered" && paid.p.basis === "Purchased", paid.p.error ?? "");
 if (paid.p.sealed) check("the lender's copy opens to the same result", openSealed(paid.sk, paid.p.sealed).mean === want.mean);
-const share = BigInt(config.read_price) / BigInt(funds.length);
-const after = await Promise.all(funds.map((f) => view<string>("get_earnings", { account: f })));
-check("each fund was credited an equal share", after.every((a, i) => BigInt(a) - BigInt(earned[i]) === share), `${share} yocto each`);
+// The read price is paid as the contract does: the council's share first, equal among its seats,
+// then equal shares to the funds; what does not divide goes to the first seat.
+const split = splitRead(BigInt(config.read_price), funds.length, seats.length, config.council_share_bps);
+const after = await earnedBy(funds);
+check("each fund was credited an equal share", after.every((a, i) => BigInt(a) - BigInt(earned[i]) === split.perFund), `${split.perFund} yocto each`);
+const seatsAfter = await earnedBy(seats);
+check(
+  "the council was paid its share, equal among the seats",
+  seatsAfter.every((a, i) => BigInt(a) - BigInt(seatsBefore[i]) === split.perSeat + (i === 0 ? split.remainder : 0n)),
+  `${split.perSeat} yocto each, the first seat also holds ${split.remainder}`,
+);
 
 // ---- an auditor opens one fund's own mark ----
 // Marks went in in the order of the run that opened the round, which a resumed

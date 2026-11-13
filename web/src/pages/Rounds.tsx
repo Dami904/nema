@@ -43,7 +43,7 @@ export default function Rounds() {
           title="No rounds yet"
           action={!demoMode && <button className="btn ghost" onClick={() => setDemoMode(true)}>See it with sample data</button>}
         >
-          The owner opens a round for each loan to be priced. It will appear here with a countdown to its deadline.
+          A panel fund or a council member opens a round for each registered loan. It will appear here with a countdown to its deadline.
         </Empty>
       ) : shown.length === 0 ? (
         <Empty title="Nothing here">No rounds match this filter.</Empty>

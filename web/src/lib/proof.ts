@@ -4,7 +4,7 @@
 //
 // OutLayer files a run under the account that signed the transaction, not under
 // the contract, so runs are looked up by the accounts that could have signed:
-// the owner (round key), whoever closed the round (tally), and the viewer (their
+// whoever opened the round (round key), whoever closed the round (tally), and the viewer (their
 // own copies and audits).
 
 import { attestationOf, jobsOf, verifyRun, type Attestation, type Check, type Job } from "./attest";

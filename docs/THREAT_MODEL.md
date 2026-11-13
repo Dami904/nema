@@ -5,7 +5,7 @@ goes bad, and what it does not defend against at all.
 
 ## What is protected
 
-1. **Each fund's mark.** Nobody, including the owner and the other funds, should
+1. **Each fund's mark.** Nobody, including the council, the deployer and the other funds, should
    learn a single fund's price.
 2. **The consensus.** Only readers who paid (or who read free because their mark
    counted or they audit a counted fund) should learn the mean and spread.
@@ -18,23 +18,25 @@ goes bad, and what it does not defend against at all.
 | --- | --- | --- |
 | Intel TDX and OutLayer's worker | Run the pinned enclave build without leaking its memory | Anything checkable: the app verifies each run's quote, build hash and caller |
 | OutLayer's keystore | Release the master secret only under the lock (contract caller + build hash) | — |
-| The contract owner (`nema-dev.testnet`) | Admit real, independent funds; set the read price | Read marks or the result (they must buy like anyone) |
+| The council (3 to 7 accounts, a majority decides; on testnet every seat is the author's) | Admit real, independent funds; remove funds; set the read price; register loans | Read marks or the result (they must buy like anyone); act alone: one member can only propose, vote or veto an admission |
+| The panel's funds, two thirds of them | Replace a council that has made no decision for the set time (90 days planned) | Anything else about the council: a council that decides anything stops the vote |
 | Funds | Submit honest marks | Anything else: out-of-range, copied and undecryptable marks are dropped |
 | Readers | Keep their reading key | Not share the result (nothing stops them) |
 | The browser | Generate and hold reading keys | — |
 
 ## If a key or party is compromised
 
-### `nema-dev.testnet` full-access key (owner and contract account)
+### The contract account's full-access key
 
-This is the most dangerous key in the system. The account is the contract, the
-owner and the OutLayer secret's owner.
+This is the most dangerous key in the system. The account is the contract, and
+`nema-dev.testnet` also owns the OutLayer secret. The council governs the
+contract's state, but cannot stop whoever holds this key from replacing the code.
 
 - **Deploy different contract code.** The enclave trusts the contract *account*,
   not its code. New code could ask the enclave to tally a hand-picked set, one
   real fund's ciphertext next to three marks the attacker chose, and read that
   fund's mark off the mean. **This breaks mark privacy.**
-- **Change the secret lock** to admit a different enclave build that simply
+- **Change the secret lock** (with `nema-dev.testnet`'s key, which owns the secret) to admit a different enclave build that simply
   prints the master secret. **This breaks everything, past rounds included.**
 - Admit sock-puppet funds so a round reaches the minimum of 4 with one real fund.
 - Set the read price.
@@ -43,6 +45,19 @@ Mitigation today: the site shows the deployed contract hash, and CI checks it
 against the build. A redeploy is public on chain. Removing the account's
 full-access key after the final deploy closes the first two; that step is
 permanent and has not been taken.
+
+### A council majority
+
+- Admit sock-puppet funds, after the veto window, if no honest member vetoes.
+- Remove honest funds, set the read price, register or remove loans, and seat or
+  unseat council members (the threshold stays a majority).
+- Not: read any mark or redeploy the contract. And a lone member acting can't stop
+  a takeover: only decisions that pass reset the silence clock.
+
+### One council member
+
+- Propose, vote, and veto any admission before it is finalized. Repeated vetoes
+  can stall admissions until a majority removes that member.
 
 ### A fund's key
 
@@ -86,8 +101,9 @@ and old rounds stay readable by whoever holds the old one.
   do afterwards.
 - **A plausible lie.** A fund can submit a wrong mark inside the valid range.
   Only its track record and its auditor show this over time.
-- **The owner admitting sock puppets.** The panel is public, so it can be
-  judged, but the contract does not prove funds are independent.
+- **The council admitting sock puppets.** A majority must approve and any member
+  can veto in the waiting window, and the panel is public, but the contract does
+  not prove funds, or council members, are independent.
 - **Intel TCB status and revocation.** The browser checks the quote's chain to
   Intel's root, not whether that platform has since been revoked.
 - **Metadata.** Who took part, when, and who bought are public on chain.
@@ -96,7 +112,7 @@ and old rounds stay readable by whoever holds the old one.
 
 ## Known weaknesses worth attacking first
 
-1. **Redeploy the contract with the owner key** and tally a crafted set. One
+1. **Redeploy the contract with the account's full-access key** and tally a crafted set. One
    transaction, no hardware attack needed, until the full-access key is removed.
 2. **Re-lock the secret** to a build that exports it. Same key, same fix.
 3. **Fill a round with sock puppets** so the "minimum of 4" protects nobody.

@@ -111,9 +111,9 @@ export default function Docs() {
 /** Extra words each section can be found by. */
 const KEYWORDS: Record<string, string> = {
   overview: "what nema mark consensus",
-  "quick-start": "wallet connect submit buy backup key fund lender owner auditor apply join start free borrowing base portfolio export csv pdf track record gap lean",
+  "quick-start": "wallet connect submit buy backup key fund lender council auditor apply join start free borrowing base portfolio export csv pdf track record gap lean",
   rounds: "lifecycle status open closing published failed deadline refund retry",
-  "who-sees-what": "privacy public chain enclave owner",
+  "who-sees-what": "privacy public chain enclave council",
   trust: "tdx outlayer hardware assumption risk",
   verify: "hash set commitment code wasm check salt attestation tdx intel quote proof enclave tee",
   contract: "methods gas deposit fee call view api",
@@ -202,7 +202,7 @@ function Overview() {
       </p>
       <div className="cards">
         <Link to="/rounds" className="doc-card"><span className="label">Browse</span><strong>Rounds</strong><span className="muted">What's being priced now</span></Link>
-        <a href="#quick-start" className="doc-card"><span className="label">Start</span><strong>Quick start</strong><span className="muted">Fund, lender or owner</span></a>
+        <a href="#quick-start" className="doc-card"><span className="label">Start</span><strong>Quick start</strong><span className="muted">Fund, lender, auditor or council</span></a>
         <a href="#verify" className="doc-card"><span className="label">Check</span><strong>Verify it yourself</strong><span className="muted">No trust in this page needed</span></a>
       </div>
     </Section>
@@ -210,7 +210,7 @@ function Overview() {
 }
 
 function QuickStart() {
-  const [role, setRole] = useState<"fund" | "lender" | "auditor" | "owner">("fund");
+  const [role, setRole] = useState<"fund" | "lender" | "auditor" | "council">("fund");
   const steps = {
     fund: [
       { title: "Apply to join", body: "From the Panel page, apply with your wallet and a 0.05 NEAR bond, returned whatever the outcome. You can name an auditor at the same time." },
@@ -236,18 +236,18 @@ function QuickStart() {
       { title: "Test it against the consensus", body: "Rounds your client counted in are free for you to read. The gap shows in standard deviations." },
       { title: "Follow the record", body: "Above the rounds, each client's track record charts every opened mark against the consensus, with its average gap and which way it leans." },
     ],
-    owner: [
-      { title: "Admit funds", body: "Approve applications, or add funds directly, on the Panel page. A round with fewer than four valid marks publishes nothing." },
-      { title: "Open a round", body: <>Name the loan and how long it stays open. Opening costs {near(ENCLAVE_FEE_YOCTO)} for the enclave to make the round's key.</> },
-      { title: "Set the read price", body: "Buyers pay it per read; it's split equally among the funds whose marks counted." },
-      { title: "Let it close", body: "After the deadline anyone can close the round. You don't hold any key that opens marks." },
+    council: [
+      { title: "Admit funds", body: "Approve applications on the Panel page. Once enough council members approve, a veto window opens; any member can still turn the fund away, and after it anyone can admit it." },
+      { title: "Decide by vote", body: "Removing a fund, the read price, registering or removing a loan, the council's seats and its threshold are proposals. One member proposes, the rest vote, and a majority runs it. A proposal lapses after 7 days." },
+      { title: "Register loans", body: <>Rounds open only on registered loans. Then any panel fund (or council member) can open one for {near(ENCLAVE_FEE_YOCTO)}, the enclave's fee for the round's key.</> },
+      { title: "Stay active", body: "If the council makes no decision for the set time, two thirds of the panel's funds can replace it. A heartbeat proposal shows the council is still there. You never hold a key that opens marks." },
     ],
   };
   return (
     <Section id="quick-start" eyebrow="Start here" title={<>Quick <em>start</em></>}>
       <p className="muted" style={{ marginBottom: 16 }}>Pick the role you're here as.</p>
       <div className="seg" role="tablist" aria-label="Choose your role">
-        {(["fund", "lender", "auditor", "owner"] as const).map((r) => (
+        {(["fund", "lender", "auditor", "council"] as const).map((r) => (
           <button key={r} role="tab" aria-selected={role === r} aria-pressed={role === r} onClick={() => setRole(r)}>
             {r[0].toUpperCase() + r.slice(1)}
           </button>
@@ -265,7 +265,7 @@ function QuickStart() {
 
 function RoundsSection() {
   const states = [
-    { name: "Preparing key", tone: "tone-busy", body: "The owner opened the round; the enclave is deriving its public key." },
+    { name: "Preparing key", tone: "tone-busy", body: "The round was opened; the enclave is deriving its public key." },
     { name: "Open", tone: "tone-open", body: "Panel funds submit sealed marks until the deadline." },
     { name: "Tallying", tone: "tone-busy", body: "Someone closed the round. The contract froze the set of submissions and asked the enclave to tally it." },
     { name: "Published", tone: "tone-pub", body: "The count, any dropped submissions and a commitment are on chain. Reads can be bought." },
@@ -394,14 +394,15 @@ function ContractRef() {
       who: "Anyone, 30 minutes after the enclave call",
       cost: "Gas only; a read's price goes back",
     },
-    { m: "open_round(loan, closes_at)", who: "Owner", cost: fee },
-    { m: "approve(account) · reject(account)", who: "Owner", cost: "Gas only; the bond goes back" },
-    { m: "add_member(account) · remove_member(account)", who: "Owner", cost: "Gas only" },
-    { m: "set_read_price(read_price)", who: "Owner", cost: "Gas only" },
+    { m: "open_round(loan_id, closes_at)", who: "Panel funds and council members, on a registered loan", cost: fee },
+    { m: "approve(account) · reject(account)", who: "A council member (reject also vetoes during the window)", cost: "Gas only; a rejected bond goes back" },
+    { m: "finalize_admission(account)", who: "Anyone, once the veto window has passed", cost: "Gas only; the bond goes back" },
+    { m: "propose(kind) · vote(proposal_id)", who: "A council member; a majority runs it", cost: "Gas only" },
+    { m: "propose_council_takeover(council, threshold) · vote_council_takeover()", who: "A panel fund, once the council has been silent for the set time", cost: "Gas only" },
   ];
   const views = [
     "get_config", "get_members", "get_rounds", "get_round", "get_submissions", "get_purchase", "get_purchases_of", "get_earnings",
-    "get_applications", "get_auditor", "get_appointment", "get_clients_of", "get_audits_of", "get_free_basis", "get_pending_since", "get_audit",
+    "get_applications", "get_council", "get_proposals", "get_loans", "get_takeover", "get_auditor", "get_appointment", "get_clients_of", "get_audits_of", "get_free_basis", "get_pending_since", "get_audit",
   ];
   return (
     <Section id="contract" eyebrow="Reference" title={<>Contract <em>methods</em></>}>

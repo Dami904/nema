@@ -57,6 +57,23 @@ const CALLBACK_GAS: Gas = Gas::from_tgas(40);
 /// For the callback after a payment, which only puts the amount back on failure.
 const PAY_GAS: Gas = Gas::from_tgas(8);
 const MAX_MEMBERS: u32 = 64;
+const MAX_COUNCIL: usize = 7;
+/// The least a council may be allowed to stay silent before the panel can replace it.
+const MIN_DORMANT_SECS: u64 = 24 * 3600;
+/// How long a vote to replace the council stays open.
+const TAKEOVER_TTL_NS: u64 = 14 * 24 * 3600 * 1_000_000_000;
+/// The most of a read fee the council may be paid, in basis points (20%). It is set
+/// when the contract is created and cannot be raised by a vote.
+const MAX_COUNCIL_SHARE_BPS: u32 = 2_000;
+/// The most loans the registry holds at once. The council removes old ones to make room.
+const MAX_LOANS: u32 = 64;
+/// A proposal that has not reached the threshold this long after it was made lapses.
+const PROPOSAL_TTL_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
+/// The longest a round can stay open, so no round can hold a loan forever.
+const MAX_ROUND_NS: u64 = 30 * 24 * 3600 * 1_000_000_000;
+/// How many open proposals one council member may have at a time, so one seat
+/// can't fill storage or make `propose` too costly to run.
+const MAX_OPEN_PROPOSALS_PER_MEMBER: usize = 4;
 const MAX_CIPHERTEXT_HEX: usize = 2048;
 const MIN_CIPHERTEXT_HEX: usize = 64;
 /// A sealed delivery is ECIES overhead (97 bytes) plus a short JSON result.
@@ -103,6 +120,9 @@ enum StorageKey {
     PurchasesByBuyer,
     AuditsByAuditor,
     PendingSince,
+    Proposals,
+    Loans,
+    LatestRound,
 }
 
 #[near(serializers = [borsh, json])]
@@ -153,7 +173,9 @@ pub struct Listing {
 #[derive(Clone)]
 pub struct Round {
     pub id: u64,
+    pub loan_id: u64,
     pub loan: String,
+    pub opened_by: AccountId,
     pub opened_at: u64,
     pub closes_at: u64,
     pub status: RoundStatus,
@@ -171,7 +193,9 @@ pub struct Round {
 #[near(serializers = [json])]
 pub struct RoundView {
     pub id: U64,
+    pub loan_id: U64,
     pub loan: String,
+    pub opened_by: AccountId,
     pub status: RoundStatus,
     pub opened_at: U64,
     pub closes_at: U64,
@@ -221,7 +245,7 @@ pub struct Purchase {
     pub error: Option<String>,
 }
 
-/// A fund asking to join the panel. The owner approves or rejects it.
+/// A fund asking to join the panel. The council approves or rejects it.
 #[near(serializers = [borsh, json])]
 #[derive(Clone)]
 pub struct Application {
@@ -231,6 +255,11 @@ pub struct Application {
     pub note: String,
     pub applied_at: U64,
     pub bond: U128,
+    /// Council members who approved it. At the threshold the veto window starts.
+    pub approvals: Vec<AccountId>,
+    /// When the fund may be admitted (anyone can finalize), once the threshold is
+    /// met. Any council member can still reject it before then.
+    pub ready_at: Option<U64>,
 }
 
 #[near(serializers = [borsh, json])]
@@ -265,6 +294,54 @@ pub struct AuditCopy {
 pub struct Appointment {
     pub auditor: AccountId,
     pub since: U64,
+}
+
+/// What the council can decide by vote.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProposalKind {
+    SetReadPrice(U128),
+    RemoveMember(AccountId),
+    AddCouncil(AccountId),
+    RemoveCouncil(AccountId),
+    /// How many council members must agree. It stays a majority, and at least 2.
+    SetThreshold(u32),
+    /// Adds a loan, by label, that funds may open rounds on.
+    RegisterLoan(String),
+    /// Takes a loan off the registry, once no round on it is running. Rounds
+    /// already run on it keep their label.
+    RemoveLoan(U64),
+    /// Changes nothing. It is how a council that has nothing else to decide shows
+    /// the panel it is still there.
+    Heartbeat,
+}
+
+/// A vote by the panel's funds to replace a council that has made no decision for
+/// too long. It dies if the council decides anything before it passes.
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Takeover {
+    pub council: Vec<AccountId>,
+    pub threshold: u32,
+    pub proposer: AccountId,
+    pub votes: Vec<AccountId>,
+    pub created_at: U64,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone)]
+pub struct Proposal {
+    pub id: U64,
+    pub kind: ProposalKind,
+    pub proposer: AccountId,
+    pub votes: Vec<AccountId>,
+    pub created_at: U64,
+}
+
+#[near(serializers = [json])]
+pub struct LoanView {
+    pub id: U64,
+    pub label: String,
 }
 
 #[near(serializers = [json])]
@@ -303,7 +380,21 @@ struct DeliverOut {
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Nema {
-    owner: AccountId,
+    /// Decides admissions, removals, the read price and the council itself.
+    council: Vec<AccountId>,
+    /// How many council members must agree.
+    threshold: u32,
+    /// How long after the threshold is met an admission waits, for a veto.
+    admit_delay_ns: u64,
+    /// The part of each paid read, in basis points, split equally among the council
+    /// seats: the pay for keeping the panel running. Fixed at deploy.
+    council_share_bps: u32,
+    /// How long the council may make no decision before the panel can replace it.
+    council_dormant_ns: u64,
+    /// When the council last made a decision (a proposal passed, or an admission
+    /// reached its threshold). One member acting alone does not count.
+    last_council_action: u64,
+    takeover: Option<Takeover>,
     outlayer_id: AccountId,
     /// e.g. "nema-dev.testnet/nema-aggregator"
     project_id: String,
@@ -332,50 +423,64 @@ pub struct Nema {
     /// When the enclave call behind a Closing round ("r{id}"), a Pending read
     /// ("p{id}") or a Pending audit ("a{id}") went out. Cleared when it settles.
     pending_since: LookupMap<String, u64>,
-}
-
-/// The state before `pending_since`, for `migrate`.
-#[near(serializers = [borsh])]
-pub struct NemaV2 {
-    owner: AccountId,
-    outlayer_id: AccountId,
-    project_id: String,
-    secrets_account: AccountId,
-    secrets_profile: String,
-    min_contributors: u32,
-    read_price: u128,
-    members: IterableSet<AccountId>,
-    rounds: IterableMap<u64, Round>,
-    next_round_id: u64,
-    purchases: IterableMap<u64, Purchase>,
-    next_purchase_id: u64,
-    earnings: LookupMap<AccountId, u128>,
-    applications: IterableMap<AccountId, Application>,
-    auditors: LookupMap<AccountId, Appointment>,
-    audits: IterableMap<u64, AuditCopy>,
-    next_audit_id: u64,
-    purchases_by_buyer: LookupMap<AccountId, Vec<u64>>,
-    audits_by_auditor: LookupMap<AccountId, Vec<u64>>,
+    proposals: IterableMap<u64, Proposal>,
+    next_proposal_id: u64,
+    /// The loans a round can be opened on: id -> label.
+    loans: IterableMap<u64, String>,
+    next_loan_id: u64,
+    /// The latest round opened on each loan: loan id -> round id. Only that round
+    /// can still be running, since a loan holds one live round at a time.
+    latest_round: LookupMap<u64, u64>,
 }
 
 #[near]
 impl Nema {
+    /// `council` and `threshold` replace a single owner: the council admits funds,
+    /// removes them, sets the read price and edits itself, by vote. `initial_members`
+    /// are the founding funds, named in public at deploy; later funds apply.
+    /// `loans` are the loans a round can first be opened on.
     #[init]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        owner: AccountId,
+        council: Vec<AccountId>,
+        threshold: u32,
+        admit_delay_secs: u64,
+        council_dormant_after_secs: u64,
         outlayer_id: AccountId,
         project_id: String,
         secrets_account: AccountId,
         secrets_profile: String,
         min_contributors: u32,
         read_price: U128,
+        council_share_bps: u32,
+        initial_members: Vec<AccountId>,
+        loans: Vec<String>,
     ) -> Self {
         require!(
             min_contributors >= 4,
             "the minimum must be at least 4 funds"
         );
-        Self {
-            owner,
+        require!(
+            council_share_bps <= MAX_COUNCIL_SHARE_BPS,
+            "the council's share of a read is at most 20%"
+        );
+        Self::assert_valid_council(&council, threshold);
+        require!(
+            council_dormant_after_secs >= MIN_DORMANT_SECS,
+            "the council must be allowed at least a day of silence"
+        );
+        require!(
+            initial_members.len() <= MAX_MEMBERS as usize,
+            "too many founding funds"
+        );
+        let mut me = Self {
+            council,
+            threshold,
+            admit_delay_ns: admit_delay_secs.saturating_mul(1_000_000_000),
+            council_share_bps,
+            council_dormant_ns: council_dormant_after_secs.saturating_mul(1_000_000_000),
+            last_council_action: env::block_timestamp(),
+            takeover: None,
             outlayer_id,
             project_id,
             secrets_account,
@@ -395,61 +500,74 @@ impl Nema {
             purchases_by_buyer: LookupMap::new(StorageKey::PurchasesByBuyer),
             audits_by_auditor: LookupMap::new(StorageKey::AuditsByAuditor),
             pending_since: LookupMap::new(StorageKey::PendingSince),
+            proposals: IterableMap::new(StorageKey::Proposals),
+            next_proposal_id: 1,
+            loans: IterableMap::new(StorageKey::Loans),
+            next_loan_id: 1,
+            latest_round: LookupMap::new(StorageKey::LatestRound),
+        };
+        for m in initial_members {
+            me.members.insert(m);
         }
-    }
-
-    /// Upgrade state written by the previous build, which had no `pending_since`.
-    /// Rounds, reads and audits keep their layout and carry over as they are.
-    #[private]
-    #[init(ignore_state)]
-    pub fn migrate() -> Self {
-        let old: NemaV2 =
-            env::state_read().unwrap_or_else(|| env::panic_str("no state to migrate"));
-        Self {
-            owner: old.owner,
-            outlayer_id: old.outlayer_id,
-            project_id: old.project_id,
-            secrets_account: old.secrets_account,
-            secrets_profile: old.secrets_profile,
-            min_contributors: old.min_contributors,
-            read_price: old.read_price,
-            members: old.members,
-            rounds: old.rounds,
-            next_round_id: old.next_round_id,
-            purchases: old.purchases,
-            next_purchase_id: old.next_purchase_id,
-            earnings: old.earnings,
-            applications: old.applications,
-            auditors: old.auditors,
-            audits: old.audits,
-            next_audit_id: old.next_audit_id,
-            purchases_by_buyer: old.purchases_by_buyer,
-            audits_by_auditor: old.audits_by_auditor,
-            pending_since: LookupMap::new(StorageKey::PendingSince),
+        for label in loans {
+            me.add_loan(label);
         }
+        me
     }
 
-    // ---- owner ----
+    // ---- council ----
 
-    pub fn add_member(&mut self, account: AccountId) {
-        self.assert_owner();
-        require!(self.members.len() < MAX_MEMBERS, "the panel is full");
-        self.members.insert(account);
+    /// A council member's vote to admit an applicant. At the threshold the veto
+    /// window opens: any council member can still `reject`, and once the window has
+    /// passed anyone can call `finalize_admission`.
+    pub fn approve(&mut self, account: AccountId) {
+        self.assert_council();
+        let who = env::predecessor_account_id();
+        let mut app = self
+            .applications
+            .get(&account)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("no such application"));
+        require!(
+            !app.approvals.contains(&who),
+            "you already approved this application"
+        );
+        app.approvals.push(who);
+        // Approvals from accounts since removed from the council do not count.
+        let approvals = app
+            .approvals
+            .iter()
+            .filter(|a| self.council.contains(a))
+            .count() as u32;
+        if app.ready_at.is_none() && approvals >= self.threshold {
+            let ready = env::block_timestamp().saturating_add(self.admit_delay_ns);
+            app.ready_at = Some(U64(ready));
+            self.mark_council_active();
+            emit(
+                "admission_ready",
+                json!({"account": account, "ready_at": U64(ready)}),
+            );
+        }
+        self.applications.insert(account, app);
     }
 
-    pub fn remove_member(&mut self, account: AccountId) {
-        self.assert_owner();
-        self.members.remove(&account);
-    }
-
-    /// Admit an applicant, with the auditor it asked for. Its bond is returned.
-    pub fn approve(&mut self, account: AccountId) -> Promise {
-        self.assert_owner();
-        require!(self.members.len() < MAX_MEMBERS, "the panel is full");
+    /// Admit an approved applicant once its veto window has passed. Anyone may call
+    /// it. The applicant's bond is returned.
+    pub fn finalize_admission(&mut self, account: AccountId) -> Promise {
         let app = self
             .applications
-            .remove(&account)
+            .get(&account)
+            .cloned()
             .unwrap_or_else(|| env::panic_str("no such application"));
+        let ready_at = app
+            .ready_at
+            .unwrap_or_else(|| env::panic_str("not approved by enough council members yet"));
+        require!(
+            env::block_timestamp() >= ready_at.0,
+            "the veto window is still open"
+        );
+        require!(self.members.len() < MAX_MEMBERS, "the panel is full");
+        self.applications.remove(&account);
         self.members.insert(account.clone());
         if let Some(auditor) = app.auditor {
             self.auditors.insert(
@@ -460,23 +578,128 @@ impl Nema {
                 },
             );
         }
+        emit("member_admitted", json!({"account": account}));
         Self::pay(account, app.bond.0)
     }
 
-    /// Turn an applicant away. Its bond is returned.
+    /// A council member turns an applicant away, or vetoes an approved one before
+    /// it is finalized. Its bond is returned.
     pub fn reject(&mut self, account: AccountId) -> Promise {
-        self.assert_owner();
+        self.assert_council();
         let app = self
             .applications
             .remove(&account)
             .unwrap_or_else(|| env::panic_str("no such application"));
+        emit(
+            "application_rejected",
+            json!({"account": account, "by": env::predecessor_account_id()}),
+        );
         Self::pay(account, app.bond.0)
     }
 
-    /// Applies to purchases made after the change.
-    pub fn set_read_price(&mut self, read_price: U128) {
-        self.assert_owner();
-        self.read_price = read_price.0;
+    /// A council member puts a decision to the council. Their proposal counts as
+    /// their vote; it runs at the threshold. Returns the proposal's id.
+    pub fn propose(&mut self, kind: ProposalKind) -> U64 {
+        self.assert_council();
+        self.check_proposal(&kind);
+        self.prune_lapsed_proposals();
+        let proposer = env::predecessor_account_id();
+        let open = self
+            .proposals
+            .values()
+            .filter(|p| p.proposer == proposer)
+            .count();
+        require!(
+            open < MAX_OPEN_PROPOSALS_PER_MEMBER,
+            "you have 4 proposals open; let one pass or lapse first"
+        );
+        let id = self.next_proposal_id;
+        self.next_proposal_id += 1;
+        let proposal = Proposal {
+            id: U64(id),
+            kind,
+            proposer: proposer.clone(),
+            votes: vec![proposer],
+            created_at: U64(env::block_timestamp()),
+        };
+        emit("proposal_made", json!({"id": id, "kind": proposal.kind}));
+        self.proposals.insert(id, proposal);
+        self.run_if_passed(id);
+        U64(id)
+    }
+
+    /// A council member's vote for a proposal.
+    pub fn vote(&mut self, proposal_id: U64) {
+        self.assert_council();
+        let who = env::predecessor_account_id();
+        let proposal = self
+            .proposals
+            .get_mut(&proposal_id.0)
+            .unwrap_or_else(|| env::panic_str("no such proposal"));
+        require!(
+            !proposal_lapsed(proposal, env::block_timestamp()),
+            "this proposal has lapsed"
+        );
+        require!(!proposal.votes.contains(&who), "you already voted");
+        proposal.votes.push(who);
+        self.run_if_passed(proposal_id.0);
+    }
+
+    // ---- when the council goes quiet ----
+
+    /// A panel fund asks the panel to replace the council. Allowed only once the
+    /// council has made no decision for `council_dormant_after_secs`. The new
+    /// council needs the same shape as the original (3 to 7 accounts, a majority
+    /// threshold). It passes when two thirds of the panel's funds vote for it, and
+    /// dies if the council decides anything first.
+    pub fn propose_council_takeover(&mut self, council: Vec<AccountId>, threshold: u32) {
+        let who = env::predecessor_account_id();
+        require!(self.members.contains(&who), "only a panel fund can do this");
+        let now = env::block_timestamp();
+        require!(
+            now >= self
+                .last_council_action
+                .saturating_add(self.council_dormant_ns),
+            "the council has made a decision recently"
+        );
+        require!(
+            !self.takeover_is_live(now),
+            "a vote to replace the council is already running"
+        );
+        require!(
+            self.members.len() >= self.min_contributors,
+            "too few funds on the panel to replace the council"
+        );
+        Self::assert_valid_council(&council, threshold);
+        emit(
+            "council_takeover_proposed",
+            json!({"proposer": who, "council": council, "threshold": threshold}),
+        );
+        self.takeover = Some(Takeover {
+            council,
+            threshold,
+            proposer: who.clone(),
+            votes: vec![who],
+            created_at: U64(now),
+        });
+        self.run_takeover_if_passed();
+    }
+
+    /// A panel fund's vote for the running takeover.
+    pub fn vote_council_takeover(&mut self) {
+        let who = env::predecessor_account_id();
+        require!(self.members.contains(&who), "only a panel fund can do this");
+        require!(
+            self.takeover_is_live(env::block_timestamp()),
+            "no vote to replace the council is running: it lapsed, or the council acted"
+        );
+        let takeover = self
+            .takeover
+            .as_mut()
+            .unwrap_or_else(|| env::panic_str("no takeover"));
+        require!(!takeover.votes.contains(&who), "you already voted");
+        takeover.votes.push(who);
+        self.run_takeover_if_passed();
     }
 
     // ---- joining ----
@@ -511,6 +734,8 @@ impl Nema {
                 note,
                 applied_at: U64(env::block_timestamp()),
                 bond: U128(bond),
+                approvals: vec![],
+                ready_at: None,
             },
         );
     }
@@ -551,22 +776,40 @@ impl Nema {
 
     // ---- rounds ----
 
-    /// Open a round. The enclave derives this round's public key; funds can
+    /// Open a round on a registered loan. Panel funds and council members can.
+    /// The enclave derives this round's public key; funds can
     /// submit once the key arrives. Attach at least 0.01 NEAR for the enclave call.
     #[payable]
-    pub fn open_round(&mut self, loan: String, closes_at: U64) -> Promise {
-        self.assert_owner();
+    pub fn open_round(&mut self, loan_id: U64, closes_at: U64) -> Promise {
+        let opener = env::predecessor_account_id();
+        require!(
+            self.members.contains(&opener) || self.council.contains(&opener),
+            "only panel funds and the council can open a round"
+        );
+        let loan = self
+            .loans
+            .get(&loan_id.0)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("no such loan; the council registers loans"));
+        require!(
+            !self.has_active_round(loan_id.0),
+            "a round on this loan is already running"
+        );
         let attached = env::attached_deposit().as_yoctonear();
         require!(
             attached >= MIN_OUTLAYER_DEPOSIT,
             "attach at least 0.01 NEAR for the enclave call"
         );
         require!(
-            loan.len() <= 120 && !loan.is_empty(),
-            "loan label must be 1 to 120 characters"
+            self.members.len() >= self.min_contributors,
+            "too few funds on the panel to ever publish a result"
         );
         let now = env::block_timestamp();
         require!(closes_at.0 > now, "closes_at must be in the future");
+        require!(
+            closes_at.0 <= now.saturating_add(MAX_ROUND_NS),
+            "a round can stay open at most 30 days"
+        );
 
         let id = self.next_round_id;
         self.next_round_id += 1;
@@ -574,7 +817,9 @@ impl Nema {
             id,
             Round {
                 id,
+                loan_id: loan_id.0,
                 loan,
+                opened_by: opener,
                 opened_at: now,
                 closes_at: closes_at.0,
                 status: RoundStatus::AwaitingKey,
@@ -586,6 +831,7 @@ impl Nema {
                 closed_by: None,
             },
         );
+        self.latest_round.insert(loan_id.0, id);
 
         emit(
             "round_created",
@@ -1067,6 +1313,40 @@ impl Nema {
         self.applications.values().cloned().collect()
     }
 
+    pub fn get_council(&self) -> Vec<AccountId> {
+        self.council.clone()
+    }
+
+    /// The running vote to replace the council, if there is one.
+    pub fn get_takeover(&self) -> Option<Takeover> {
+        if self.takeover_is_live(env::block_timestamp()) {
+            self.takeover.clone()
+        } else {
+            None
+        }
+    }
+
+    /// Proposals still open for votes. Lapsed ones are left out, and cleared from
+    /// storage when the next proposal is made.
+    pub fn get_proposals(&self) -> Vec<Proposal> {
+        let now = env::block_timestamp();
+        self.proposals
+            .values()
+            .filter(|p| !proposal_lapsed(p, now))
+            .cloned()
+            .collect()
+    }
+
+    pub fn get_loans(&self) -> Vec<LoanView> {
+        self.loans
+            .iter()
+            .map(|(id, label)| LoanView {
+                id: U64(*id),
+                label: label.clone(),
+            })
+            .collect()
+    }
+
     pub fn get_auditor(&self, fund: AccountId) -> Option<AccountId> {
         self.auditors.get(&fund).map(|ap| ap.auditor.clone())
     }
@@ -1111,7 +1391,12 @@ impl Nema {
 
     pub fn get_config(&self) -> Value {
         json!({
-            "owner": self.owner,
+            "council": self.council,
+            "threshold": self.threshold,
+            "admit_delay_secs": self.admit_delay_ns / 1_000_000_000,
+            "council_share_bps": self.council_share_bps,
+            "council_dormant_after_secs": self.council_dormant_ns / 1_000_000_000,
+            "last_council_action": U64(self.last_council_action),
             "outlayer": self.outlayer_id,
             "project_id": self.project_id,
             "min_contributors": self.min_contributors,
@@ -1124,11 +1409,221 @@ impl Nema {
 }
 
 impl Nema {
-    fn assert_owner(&self) {
-        require!(
-            env::predecessor_account_id() == self.owner,
-            "only the owner can do this"
+    /// The shape every council has, at creation and when the panel replaces it.
+    fn assert_valid_council(council: &[AccountId], threshold: u32) {
+        if let Some(reason) = council_shape_problem(council, threshold) {
+            env::panic_str(reason);
+        }
+    }
+
+    fn mark_council_active(&mut self) {
+        self.last_council_action = env::block_timestamp();
+    }
+
+    /// A takeover is live while it is younger than its time limit and the council
+    /// has not decided anything since it was made.
+    fn takeover_is_live(&self, now: u64) -> bool {
+        self.takeover.as_ref().is_some_and(|t| {
+            t.created_at.0 > self.last_council_action
+                && now <= t.created_at.0.saturating_add(TAKEOVER_TTL_NS)
+        })
+    }
+
+    fn run_takeover_if_passed(&mut self) {
+        let Some(t) = &self.takeover else {
+            return;
+        };
+        // A panel this small can't speak for itself (funds may have been removed).
+        if self.members.len() < self.min_contributors {
+            return;
+        }
+        // Votes from accounts since removed from the panel do not count.
+        let votes = t.votes.iter().filter(|v| self.members.contains(*v)).count() as u64;
+        if votes * 3 < self.members.len() as u64 * 2 {
+            return;
+        }
+        let Some(t) = self.takeover.take() else {
+            return;
+        };
+        emit(
+            "council_replaced",
+            json!({"council": t.council, "threshold": t.threshold}),
         );
+        self.council = t.council;
+        self.threshold = t.threshold;
+        self.mark_council_active();
+        // The new council starts clean: the old council's open proposals and its
+        // approvals of applicants don't carry over.
+        let ids: Vec<u64> = self.proposals.keys().copied().collect();
+        for id in ids {
+            self.proposals.remove(&id);
+        }
+        let applicants: Vec<AccountId> = self.applications.keys().cloned().collect();
+        for a in applicants {
+            if let Some(app) = self.applications.get_mut(&a) {
+                app.approvals.clear();
+                app.ready_at = None;
+            }
+        }
+    }
+
+    /// A seat that leaves the council takes its votes and approvals with it, so they
+    /// can't count again if it is seated later.
+    fn forget_seat(&mut self, seat: &AccountId) {
+        let ids: Vec<u64> = self.proposals.keys().copied().collect();
+        for id in ids {
+            if let Some(p) = self.proposals.get_mut(&id) {
+                p.votes.retain(|v| v != seat);
+            }
+        }
+        let applicants: Vec<AccountId> = self.applications.keys().cloned().collect();
+        for a in applicants {
+            if let Some(app) = self.applications.get_mut(&a) {
+                app.approvals.retain(|v| v != seat);
+            }
+        }
+    }
+
+    fn assert_council(&self) {
+        require!(
+            self.council.contains(&env::predecessor_account_id()),
+            "only a council member can do this"
+        );
+    }
+
+    fn add_loan(&mut self, label: String) {
+        require!(
+            !label.is_empty() && label.len() <= 120,
+            "loan label must be 1 to 120 characters"
+        );
+        require!(self.loans.len() < MAX_LOANS, "the loan registry is full");
+        require!(
+            !self.loans.values().any(|l| l == &label),
+            "this loan is already registered"
+        );
+        self.loans.insert(self.next_loan_id, label);
+        self.next_loan_id += 1;
+    }
+
+    /// Clears proposals that can no longer pass, so storage holds only live ones.
+    fn prune_lapsed_proposals(&mut self) {
+        let now = env::block_timestamp();
+        let lapsed: Vec<u64> = self
+            .proposals
+            .iter()
+            .filter(|(_, p)| proposal_lapsed(p, now))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in lapsed {
+            self.proposals.remove(&id);
+            emit("proposal_lapsed", json!({"id": id}));
+        }
+    }
+
+    /// Whether a round on this loan is still going (waiting for its key, open,
+    /// closing, or awaiting a retried close). Only the loan's latest round can be.
+    fn has_active_round(&self, loan_id: u64) -> bool {
+        self.latest_round
+            .get(&loan_id)
+            .and_then(|id| self.rounds.get(id))
+            .is_some_and(|r| {
+                matches!(
+                    r.status,
+                    RoundStatus::AwaitingKey
+                        | RoundStatus::Open
+                        | RoundStatus::Closing
+                        | RoundStatus::CloseFailed
+                )
+            })
+    }
+
+    /// Reject a proposal that could never run, so it fails when made, not when
+    /// the last vote comes in.
+    fn check_proposal(&self, kind: &ProposalKind) {
+        if let Some(reason) = self.proposal_problem(kind) {
+            env::panic_str(reason);
+        }
+    }
+
+    /// Why a proposal can't run now, if it can't.
+    fn proposal_problem(&self, kind: &ProposalKind) -> Option<&'static str> {
+        let fail = |bad: bool, reason: &'static str| bad.then_some(reason);
+        match kind {
+            ProposalKind::SetReadPrice(_) | ProposalKind::Heartbeat => None,
+            ProposalKind::RemoveMember(a) => fail(!self.members.contains(a), "not a panel member"),
+            ProposalKind::AddCouncil(a) => fail(self.council.contains(a), "already on the council")
+                .or(fail(
+                    self.council.len() >= MAX_COUNCIL,
+                    "the council is full",
+                )),
+            // The threshold was a majority of the larger council, so it stays one.
+            ProposalKind::RemoveCouncil(a) => fail(!self.council.contains(a), "not on the council")
+                .or(fail(
+                    self.council.len() <= self.threshold as usize || self.council.len() <= 3,
+                    "the council would fall below its threshold or 3 members",
+                )),
+            ProposalKind::SetThreshold(t) => council_shape_problem(&self.council, *t),
+            ProposalKind::RegisterLoan(label) => fail(
+                label.is_empty() || label.len() > 120,
+                "loan label must be 1 to 120 characters",
+            )
+            .or(fail(
+                self.loans.len() >= MAX_LOANS,
+                "the loan registry is full",
+            ))
+            .or(fail(
+                self.loans.values().any(|l| l == label),
+                "this loan is already registered",
+            )),
+            ProposalKind::RemoveLoan(id) => fail(self.loans.get(&id.0).is_none(), "no such loan")
+                .or(fail(
+                    self.has_active_round(id.0),
+                    "a round on this loan is still running",
+                )),
+        }
+    }
+
+    fn run_if_passed(&mut self, id: u64) {
+        let Some(p) = self.proposals.get(&id) else {
+            return;
+        };
+        // Votes from accounts since removed from the council do not count.
+        let votes = p.votes.iter().filter(|v| self.council.contains(v)).count();
+        if (votes as u32) < self.threshold {
+            return;
+        }
+        let kind = p.kind.clone();
+        self.proposals.remove(&id);
+        // Something changed since it was made (another proposal ran first): it fails
+        // cleanly, and the vote that reached the threshold still lands.
+        if let Some(reason) = self.proposal_problem(&kind) {
+            emit("proposal_failed", json!({"id": id, "reason": reason}));
+            return;
+        }
+        self.mark_council_active();
+        match kind.clone() {
+            ProposalKind::SetReadPrice(price) => self.read_price = price.0,
+            ProposalKind::RemoveMember(a) => {
+                self.members.remove(&a);
+            }
+            ProposalKind::AddCouncil(a) => {
+                self.council.push(a);
+                // A bigger council needs more votes, or a minority could decide.
+                let majority = self.council.len() as u32 / 2 + 1;
+                self.threshold = self.threshold.max(majority);
+            }
+            ProposalKind::RemoveCouncil(a) => {
+                self.council.retain(|c| c != &a);
+                self.forget_seat(&a);
+            }
+            ProposalKind::SetThreshold(t) => self.threshold = t,
+            ProposalKind::RegisterLoan(label) => self.add_loan(label),
+            ProposalKind::RemoveLoan(id) => {
+                self.loans.remove(&id.0);
+            }
+            ProposalKind::Heartbeat => {}
+        }
+        emit("proposal_passed", json!({"id": id, "kind": kind}));
     }
 
     fn purchase_ids_of(&self, buyer: &AccountId) -> Vec<u64> {
@@ -1396,6 +1891,12 @@ impl Nema {
                 round.last_error = Some(clip(e));
             }
         }
+        if round.status == RoundStatus::Failed {
+            emit(
+                "round_key_failed",
+                json!({"round_id": round_id, "error": round.last_error}),
+            );
+        }
     }
 
     fn apply_tally(&mut self, round_id: u64, result: Result<Value, String>) {
@@ -1477,20 +1978,52 @@ impl Nema {
         }
     }
 
-    /// Equal shares to each contributor; the indivisible remainder goes to the owner.
+    /// A read fee is paid out in full: the council's share first (equal among its
+    /// seats), then equal shares to each contributor; whatever does not divide goes
+    /// to the first council seat.
     fn credit_contributors(&mut self, contributors: &[AccountId], amount: u128) {
         if contributors.is_empty() || amount == 0 {
             return;
         }
-        let share = amount / contributors.len() as u128;
-        let remainder = amount - share * contributors.len() as u128;
+        let bps = self.council_share_bps as u128;
+        // amount * bps / 10_000 without overflowing for any amount that exists.
+        let cut = amount / 10_000 * bps + (amount % 10_000) * bps / 10_000;
+        let seats = self.council.len() as u128;
+        let per_seat = cut / seats;
+        if per_seat > 0 {
+            for seat in &self.council {
+                *self.earnings.entry(seat.clone()).or_insert(0) += per_seat;
+            }
+        }
+        let pool = amount - per_seat * seats;
+        let share = pool / contributors.len() as u128;
+        let remainder = pool - share * contributors.len() as u128;
         for c in contributors {
             *self.earnings.entry(c.clone()).or_insert(0) += share;
         }
         if remainder > 0 {
-            *self.earnings.entry(self.owner.clone()).or_insert(0) += remainder;
+            *self.earnings.entry(self.council[0].clone()).or_insert(0) += remainder;
         }
     }
+}
+
+/// What is wrong with a council and threshold, if anything: 3 to 7 different
+/// accounts, and a threshold that is a majority and at least 2.
+fn council_shape_problem(council: &[AccountId], threshold: u32) -> Option<&'static str> {
+    let unique: HashSet<&AccountId> = council.iter().collect();
+    if unique.len() != council.len() || !(3..=MAX_COUNCIL).contains(&council.len()) {
+        return Some("the council needs 3 to 7 different accounts");
+    }
+    let t = threshold as usize;
+    if threshold < 2 || t > council.len() || t * 2 <= council.len() {
+        return Some("the threshold must be a majority of the council, and at least 2");
+    }
+    None
+}
+
+/// A proposal that did not reach the threshold within a week can no longer pass.
+fn proposal_lapsed(p: &Proposal, now: u64) -> bool {
+    now > p.created_at.0.saturating_add(PROPOSAL_TTL_NS)
 }
 
 /// A NEP-297 event, so indexers and the site can follow every state change.
@@ -1616,7 +2149,7 @@ fn clip(mut s: String) -> String {
 
 /// The longest enclave answer the callback reads. A tally, a sealed read or an
 /// audit is a few kilobytes; reading more would only spend the callback's gas.
-pub const MAX_ENCLAVE_ANSWER: usize = 256 * 1024;
+pub const MAX_ENCLAVE_ANSWER: usize = 64 * 1024;
 
 /// The enclave's answer to the call this callback follows. If OutLayer refused the
 /// call itself, NEAR returned its fee here, so it goes back to the payer. Bytes that
@@ -1656,7 +2189,9 @@ fn outcome(r: Result<Value, PromiseError>) -> Result<Value, String> {
 fn view_of(r: &Round) -> RoundView {
     RoundView {
         id: U64(r.id),
+        loan_id: U64(r.loan_id),
         loan: r.loan.clone(),
+        opened_by: r.opened_by.clone(),
         status: r.status,
         opened_at: U64(r.opened_at),
         closes_at: U64(r.closes_at),

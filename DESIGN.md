@@ -7,13 +7,13 @@ Working notes, not marketing. Updated as decisions are made.
 | Part | Where | State |
 | --- | --- | --- |
 | Enclave module (derive key, tally, sealed delivery, audit) | `aggregator/` | Done, 32 tests, builds to wasm32-wasip2 (461 KB, sha256 `3ed58517…50d6`), active on OutLayer from FastFS, with the `enclave-v2` release as a standby copy (`pnpm live:enclave-source`) |
-| NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done, 121 unit tests. Live on testnet (sha256 `248f6ca6…d24a`, a reproducible build of `8475de8`), migrated in place from each earlier build |
+| NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done. v1 is live on testnet (sha256 `248f6ca6…d24a`, a reproducible build of `8475de8`, 121 unit tests), migrated in place from each earlier build. v2, the council contract ([V2_DESIGN.md](docs/V2_DESIGN.md)), is deployed to `nema-v2.testnet` (sha256 `be256553…cd5d`, a reproducible build of `cf10491`, 210 unit tests) |
 | Browser crypto check (eciesjs 0.5.0) | `interop/` | Done: both directions verified against the enclave code |
 | Web UI (encrypt in browser, submit, buy or claim, open the sealed copy, audit) | `web/` | Done, sample data for every state; no live call sent yet |
 
 ## Round lifecycle
 
-`open_round` (owner) -> enclave derives the round key -> `Open` ->
+`open_round` (v1: the owner; v2: a panel fund or council member) -> enclave derives the round key -> `Open` ->
 funds call `submit` with an ECIES ciphertext -> deadline passes ->
 anyone calls `close_round` -> contract commits the submission set (hash) and
 calls the enclave -> enclave returns the count, the rejected list and a
@@ -97,10 +97,11 @@ ECIES: secp256k1, uncompressed ephemeral key, HKDF-SHA256, AES-256-GCM with a
 - Out-of-range, undecryptable and copied submissions are dropped and named, so
   one bad fund cannot veto a round.
 - The latest submission before the deadline counts.
-- Membership is an owner-managed allowlist (a stated trust assumption). Funds
+- Membership is an allowlist (a stated trust assumption), managed by the owner in
+  v1 and by council vote in v2. Funds
   apply with a 0.05 NEAR bond, returned on approval, rejection or withdrawal, so
-  the queue (capped at 32) can't be filled for free. The owner can still add a
-  fund directly.
+  the queue (capped at 32) can't be filled for free. In v1 the owner can still add
+  a fund directly; v2 has no such shortcut.
 - Funds whose marks counted, and the auditors they named no later than the
   round's deadline, read the result for free (`claim_read`), once per round
   unless the last copy failed. A dropped fund pays like anyone else. The
@@ -114,7 +115,7 @@ ECIES: secp256k1, uncompressed ephemeral key, HKDF-SHA256, AES-256-GCM with a
   the copy is the one that counts.
 - `withdraw` puts the earnings back if the transfer fails. Purchases and audits
   are indexed by account, so the per-account views don't scan every record.
-- A fund names its own auditor; the owner cannot. The auditor's copy of a mark is
+- A fund names its own auditor; the owner (v2: the council) cannot. The auditor's copy of a mark is
   made by the enclave from the ciphertext on chain, not by the fund, so a fund
   can't show its auditor a different number from the one it submitted. The
   enclave checks the plaintext names that fund. Clearing the auditor ends access
@@ -162,6 +163,7 @@ open:
   count, who was rejected and why, the commitment, who bought, and each sealed
   copy.
 - A buyer who opens the result can share it. Nothing stops that.
-- The owner cannot read marks or the result without buying, but chooses the panel.
+- The owner (v2: the council) cannot read marks or the result without buying, but
+  chooses the panel.
 - A fund can still lie inside the valid range; only out-of-range values are
   caught.

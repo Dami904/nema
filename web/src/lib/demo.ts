@@ -4,15 +4,17 @@
 import { CONFIG } from "./config";
 import { commitment, setHash, toHex } from "./hashes";
 import { encodeLoan } from "./loan";
-import type { Application, AuditCopy, AuditOpened, Config, Opened, Purchase, Rejected, Round, Submission } from "./types";
+import { splitRead } from "./split";
+import type { Application, AuditCopy, AuditOpened, Config, Opened, Purchase, Rejected, Round, Submission, RegisteredLoan, Proposal, Takeover } from "./types";
 
 const MIN = 60_000;
 const ns = (ms: number) => (BigInt(Math.round(ms)) * 1_000_000n).toString();
-const suffix = `.${CONFIG.contract}`;
+const suffix = `.${CONFIG.accountsBase}`;
 const fund = (n: number) => `fund${n}${suffix}`;
 // The same four funds as the live panel.
 const FUNDS = [1, 2, 3, 4].map(fund);
 export const DEMO_LENDER = `lender${suffix}`;
+export const DEMO_COUNCIL = [1, 2, 3].map((n) => `council${n}${suffix}`);
 /** Audits fund1, which named it. */
 export const DEMO_AUDITOR = `auditor${suffix}`;
 
@@ -44,6 +46,9 @@ export const DEMO_AUDITED: Record<string, AuditOpened> = {
 };
 
 type Store = {
+  loans: RegisteredLoan[];
+  proposals: Proposal[];
+  takeover: Takeover | null;
   config: Config;
   members: string[];
   rounds: Round[];
@@ -100,10 +105,13 @@ export async function simulate(method: string, args: Record<string, unknown>, ac
     setTimeout(() => {
       purchase.status = "Delivered";
       purchase.sealed = "04" + "7c".repeat(150);
-      // The read price is shared equally among the funds whose marks counted.
+      // Paid out as the contract does: the council's share, then the funds whose marks counted.
       if (price > 0n) {
-        const share = price / BigInt(contributors.length);
-        for (const c of contributors) s.earnings[c] = (BigInt(s.earnings[c] ?? "0") + share).toString();
+        const { perSeat, perFund, remainder } = splitRead(price, contributors.length, s.config.council.length, s.config.council_share_bps);
+        const credit = (a: string, v: bigint) => (s.earnings[a] = (BigInt(s.earnings[a] ?? "0") + v).toString());
+        if (perSeat > 0n) for (const seat of s.config.council) credit(seat, perSeat);
+        for (const c of contributors) credit(c, perFund);
+        if (remainder > 0n) credit(s.config.council[0], remainder);
       }
       changed();
     }, SAMPLE_SEAL_MS);
@@ -147,7 +155,9 @@ async function build(): Promise<Store> {
     const o = DEMO_OPENED[id];
     return {
       id,
+      loan_id: String(registry.indexOf(loan) + 1),
       loan,
+      opened_by: fund(1),
       status: "Published",
       opened_at: ns(now - (closedAgoMin + 3 * 24 * 60) * MIN),
       closes_at: ns(now - closedAgoMin * MIN),
@@ -165,12 +175,20 @@ async function build(): Promise<Store> {
     };
   };
 
+  const osprey = encodeLoan({ borrower: "Osprey Marine", facility: "Delayed draw term loan", maturity: "2030-03-31" });
+  const harbor = encodeLoan({ borrower: "Harbor Retail", facility: "Term loan B", maturity: "2029-06-30" });
+  const wren = encodeLoan({ borrower: "Wren Health", facility: "Revolver", maturity: "2028-12-15" });
+  const fenwick = encodeLoan({ borrower: "Fenwick Foods", facility: "Second lien", maturity: "2031-01-31" });
   const kestrel = encodeLoan({ borrower: "Kestrel Software", facility: "First lien term loan", maturity: "2031-05-31" });
   const calder = (asOf: string) => encodeLoan({ borrower: "Calder Logistics", facility: "Unitranche", maturity: asOf });
+  const registry = [osprey, harbor, wren, kestrel, calder("2030-09-30"), fenwick];
+  const loans: RegisteredLoan[] = registry.map((label, i) => ({ id: String(i + 1), label }));
   const rounds: Round[] = [
     {
       id: "6",
-      loan: encodeLoan({ borrower: "Osprey Marine", facility: "Delayed draw term loan", maturity: "2030-03-31" }),
+      loan_id: String(registry.indexOf(osprey) + 1),
+      loan: osprey,
+      opened_by: fund(2),
       status: "AwaitingKey",
       opened_at: ns(now - 1 * MIN),
       closes_at: ns(now + 3 * 24 * 60 * MIN),
@@ -182,7 +200,9 @@ async function build(): Promise<Store> {
     },
     {
       id: "3",
-      loan: encodeLoan({ borrower: "Harbor Retail", facility: "Term loan B", maturity: "2029-06-30" }),
+      loan_id: String(registry.indexOf(harbor) + 1),
+      loan: harbor,
+      opened_by: fund(2),
       status: "Open",
       opened_at: ns(now - 8 * 60 * MIN),
       closes_at: ns(now + (2 * 24 * 60 + 4 * 60) * MIN),
@@ -194,7 +214,9 @@ async function build(): Promise<Store> {
     },
     {
       id: "4",
-      loan: encodeLoan({ borrower: "Wren Health", facility: "Revolver", maturity: "2028-12-15" }),
+      loan_id: String(registry.indexOf(wren) + 1),
+      loan: wren,
+      opened_by: fund(2),
       status: "Closing",
       opened_at: ns(now - 2 * 24 * 60 * MIN),
       closes_at: ns(now - 2 * MIN),
@@ -208,7 +230,9 @@ async function build(): Promise<Store> {
     await published("2", calder("2030-09-30"), 2 * 24 * 60),
     {
       id: "5",
-      loan: encodeLoan({ borrower: "Fenwick Foods", facility: "Second lien", maturity: "2031-01-31" }),
+      loan_id: String(registry.indexOf(fenwick) + 1),
+      loan: fenwick,
+      opened_by: fund(2),
       status: "Failed",
       opened_at: ns(now - 9 * 24 * 60 * MIN),
       closes_at: ns(now - 6 * 24 * 60 * MIN),
@@ -253,8 +277,18 @@ async function build(): Promise<Store> {
 
   const share = (10n ** 23n / 4n).toString();
   return {
+    loans,
+    takeover: null,
+    proposals: [
+      { id: "1", kind: { SetReadPrice: (15n * 10n ** 22n).toString() }, proposer: DEMO_COUNCIL[1], votes: [DEMO_COUNCIL[1]], created_at: ns(now - 3 * 60 * MIN) },
+    ],
     config: {
-      owner: CONFIG.contract,
+      council: DEMO_COUNCIL,
+      threshold: 2,
+      admit_delay_secs: 3600,
+      council_share_bps: 500,
+      council_dormant_after_secs: 90 * 24 * 3600,
+      last_council_action: ns(now - 3 * 24 * 60 * MIN),
       outlayer: "outlayer.testnet",
       project_id: "nema-dev.testnet/nema-aggregator",
       min_contributors: 4,
@@ -267,7 +301,7 @@ async function build(): Promise<Store> {
     purchases,
     earnings: Object.fromEntries(FUNDS.map((f) => [f, (BigInt(share) * 2n).toString()])),
     applications: [
-      { account: `applicant${suffix}`, auditor: `ledgerline-audit${suffix}`, note: "Lower mid-market sponsor loans, 38 positions", applied_at: ns(now - 5 * 60 * MIN), bond: (5n * 10n ** 22n).toString() },
+      { account: `applicant${suffix}`, auditor: `ledgerline-audit${suffix}`, note: "Lower mid-market sponsor loans, 38 positions", applied_at: ns(now - 5 * 60 * MIN), bond: (5n * 10n ** 22n).toString(), approvals: [DEMO_COUNCIL[1]], ready_at: null },
     ],
     auditors: { [fund(1)]: DEMO_AUDITOR },
     audits: [audit("1", "1", "Delivered"), audit("2", "2", "Delivered"), audit("3", "7", "Delivered"), audit("4", "8", "Delivered")],
