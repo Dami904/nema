@@ -23,6 +23,7 @@ import { encodeLoan } from "../src/lib/loan";
 import { viewAccount } from "../src/lib/near";
 import { openAudit, openSealed, sealMark } from "../src/lib/keys";
 import type { AuditCopy, Basis, Config, Purchase, Round, Submission } from "../src/lib/types";
+import { splitRead } from "../src/lib/split";
 import { allRounds, applyAndAdmit, arg, BASE, call, decide, FUNDS, LENDER, registerLoan, sleep, until, view } from "./cli";
 
 /** Opens the round: any panel fund or council member may. */
@@ -159,13 +160,24 @@ try {
 check("a fund gets one free copy per round", twice);
 
 // ---- a lender pays, and the funds are paid ----
-const earned = await Promise.all(funds.map((f) => view<string>("get_earnings", { account: f })));
+const earnedBy = (accounts: string[]) => Promise.all(accounts.map((a) => view<string>("get_earnings", { account: a })));
+const seats = config.council;
+const earned = await earnedBy(funds);
+const seatsBefore = await earnedBy(seats);
 const paid = await read(lender, "buy_read", BigInt(config.read_price) + READ_EXTRA_YOCTO);
 check("the lender's paid read was delivered", paid.p.status === "Delivered" && paid.p.basis === "Purchased", paid.p.error ?? "");
 if (paid.p.sealed) check("the lender's copy opens to the same result", openSealed(paid.sk, paid.p.sealed).mean === want.mean);
-const share = BigInt(config.read_price) / BigInt(funds.length);
-const after = await Promise.all(funds.map((f) => view<string>("get_earnings", { account: f })));
-check("each fund was credited an equal share", after.every((a, i) => BigInt(a) - BigInt(earned[i]) === share), `${share} yocto each`);
+// The read price is paid as the contract does: the council's share first, equal among its seats,
+// then equal shares to the funds; what does not divide goes to the first seat.
+const split = splitRead(BigInt(config.read_price), funds.length, seats.length, config.council_share_bps);
+const after = await earnedBy(funds);
+check("each fund was credited an equal share", after.every((a, i) => BigInt(a) - BigInt(earned[i]) === split.perFund), `${split.perFund} yocto each`);
+const seatsAfter = await earnedBy(seats);
+check(
+  "the council was paid its share, equal among the seats",
+  seatsAfter.every((a, i) => BigInt(a) - BigInt(seatsBefore[i]) === split.perSeat + (i === 0 ? split.remainder : 0n)),
+  `${split.perSeat} yocto each, the first seat also holds ${split.remainder}`,
+);
 
 // ---- an auditor opens one fund's own mark ----
 // Marks went in in the order of the run that opened the round, which a resumed
