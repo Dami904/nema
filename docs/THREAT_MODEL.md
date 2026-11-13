@@ -99,6 +99,10 @@ and old rounds stay readable by whoever holds the old one.
   on a threshold of independent nodes.
 - **Readers sharing the result.** Nema controls who can open it, not what they
   do afterwards.
+- **Two colluding funds in a four-fund round.** A buyer gets the mean to a
+  hundredth and the spread to 1e-4. Two funds that share their own marks and buy
+  the result can solve for the other two marks exactly (not which fund sent
+  which). A rounded result is next on the [roadmap](ROADMAP.md).
 - **A plausible lie.** A fund can submit a wrong mark inside the valid range.
   Only its track record and its auditor show this over time.
 - **The council admitting sock puppets.** A majority must approve and any member

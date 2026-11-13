@@ -130,6 +130,7 @@ pnpm --filter nema-web live:check-attest --job 16947 --network testnet --contrac
 - [Project layout](#project-layout)
 - [Run it locally](#run-it-locally)
 - [How it was built](#how-it-was-built)
+- [Roadmap](docs/ROADMAP.md) and [Nema next to Sputnik DAO, Trezu and NEAR AI](docs/PARTNERS.md)
 
 ---
 
