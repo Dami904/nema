@@ -78,13 +78,13 @@ every round. Three consequences:
 
 ### Deferred (needs the enclave rebuild)
 
-- Rounded result and trimmed median, against the subtraction attack.
+- Rounded result and trimmed median, against the subtraction attack. **Shipped in v2.1** as a trimmed mean (see [ROADMAP.md](ROADMAP.md)).
 - Affiliation groups, so a round needs 4 distinct groups, not 4 accounts.
 - Anomaly flags on marks, computed inside the enclave.
 - A slashable bond held for the whole membership, not only while applying.
 - Self-upgrade by council vote with a timelock, then deleting the account's
   full-access key.
-- An optional allowlist of readers (off by default), so lenders can be vetted.
+- An optional allowlist of readers (off by default), so lenders can be vetted. **Shipped in v2.1.**
 - Moving the enclave project and its secret under the council's control.
 - Letting any two panel funds register a loan, with a council veto, so growth needs
   the council less.

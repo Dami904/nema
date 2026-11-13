@@ -9,11 +9,11 @@
 Sealed marks in. One consensus out. Nobody sees a single price.
 
 [![CI](https://github.com/Dami904/nema/actions/workflows/ci.yml/badge.svg)](https://github.com/Dami904/nema/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-251%20passing-22C55E?style=flat)](#tested-not-claimed)
+[![Tests](https://img.shields.io/badge/tests-276%20passing-22C55E?style=flat)](#tested-not-claimed)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Live](https://img.shields.io/badge/live-nema--near.vercel.app-000000?style=flat)](https://nema-near.vercel.app)
 [![NEAR testnet](https://img.shields.io/badge/NEAR%20testnet-nema--dev.testnet-1E2B25?style=flat)](https://testnet.nearblocks.io/address/nema-dev.testnet)
-[![Enclave](https://img.shields.io/badge/enclave-OutLayer%20·%20Intel%20TDX-4B6355?style=flat)](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm)
+[![Enclave](https://img.shields.io/badge/enclave-OutLayer%20·%20Intel%20TDX-4B6355?style=flat)](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8.wasm)
 
 **[Live app](https://nema-near.vercel.app)** · **[Docs](https://nema-near.vercel.app/docs)** · **[Judge it in 90 seconds](#judge-it-in-90-seconds)** · **[Proven on NEAR testnet](#proven-on-near-testnet)** · **[How a round works](#how-a-round-works)**
 
@@ -92,9 +92,9 @@ for a look around:
 
 |         |                                                                                          |
 | ------- | ---------------------------------------------------------------------------------------- |
-| **251** | automated tests passing: 210 contract, 32 enclave, 9 browser crypto assertions           |
-| **62**  | safety guards, each removed in turn to confirm a test fails without it: 19 in v1, 43 added by the v2 council ([CLAIMS.md](docs/CLAIMS.md)) |
-| **20**  | checks in the live smoke test: 20 of 20 on v1 round 6; 19 of 20 on v2 round 1, where the 20th still expected v1's split (fixed, see below) |
+| **276** | automated tests passing: 224 contract, 42 enclave, 10 browser crypto assertions          |
+| **74**  | safety guards, each removed in turn to confirm a test fails without it: 19 in v1, 43 added by the v2 council, 12 by v2.1's rounding and reader allowlist ([CLAIMS.md](docs/CLAIMS.md)) |
+| **20**  | checks in the live smoke test: all passing on v2.1 round 3 (rounded, trimmed result; the council's pay); 20 of 20 on v1 round 6 |
 | **5**   | checks on every enclave run, from Intel's root certificate to Nema's build hash          |
 | **4**   | valid marks at minimum before anything is published                                      |
 
@@ -163,7 +163,7 @@ Each piece does real work. None is decorative.
 | --- | --- | --- |
 | **NEAR contract** | Members and applications, rounds and deadlines, the sealed submissions, the committed set, listings, paid and free reads, audits, fee shares and refunds | [`contract/src/lib.rs`](contract/src/lib.rs) |
 | **OutLayer TEE execution** | Runs the enclave module inside Intel TDX for each round key, tally, delivery and audit, called by the contract through `request_execution` with a callback | [`aggregator/src/main.rs`](aggregator/src/main.rs) |
-| **OutLayer secrets** | The master secret is generated inside OutLayer's TEE and released only to runs requested through `nema-dev.testnet` of the exact enclave build `3ed58517…` (`Predecessor` + `WasmHash` lock) | [`aggregator/src/crypto.rs`](aggregator/src/crypto.rs) |
+| **OutLayer secrets** | The master secret is generated inside OutLayer's TEE and released only to runs requested through `nema-dev.testnet` of the exact enclave build `f3173709…` (`Predecessor` + `WasmHash` lock) | [`aggregator/src/crypto.rs`](aggregator/src/crypto.rs) |
 | **OutLayer attestations** | Each run's Intel TDX quote, checked in the browser: Intel's chain, the task hash, the worker image, Nema's build hash, the requesting contract | [`web/src/lib/attest.ts`](web/src/lib/attest.ts) |
 | **NEAR Wallet Selector** | Meteor, MyNearWallet and HERE sign-in; every call is signed in the user's own wallet | [`web/src/lib/wallet.tsx`](web/src/lib/wallet.tsx) |
 | **FastNEAR RPC** | Every view the app reads | [`web/src/lib/near.ts`](web/src/lib/near.ts) |
@@ -219,7 +219,7 @@ flowchart TD
     C["Nema contract<br/>nema-dev.testnet"]
   end
   subgraph OutLayer["OutLayer · Intel TDX"]
-    E["Nema enclave module<br/>wasm 3ed58517…"]
+    E["Nema enclave module<br/>wasm f3173709…"]
     K["Keystore<br/>master secret, locked to the contract + build"]
   end
 
@@ -242,7 +242,7 @@ flowchart TD
 
 | Path | Role |
 | --- | --- |
-| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 210 tests |
+| [`contract/`](contract) | The NEAR contract (near-sdk 5.30), 224 tests |
 | [`aggregator/`](aggregator) | The enclave module (Rust → `wasm32-wasip2`), 32 tests |
 | [`web/`](web) | The app (React, Vite): seven pages, sample data for every state, wallet sign-in |
 | [`web/scripts/`](web/scripts) | `smoke.ts` (one full live round), `close-rounds.ts`, `check-attest.ts`, `check-crypto.ts` (the `pnpm test` vectors), `cli.ts` (shared NEAR CLI wrapper) |
@@ -352,14 +352,14 @@ if set_hash != expected_set_hash {
 
 ## Tested, not claimed
 
-**251 automated tests pass**: 210 contract (`cargo test` in `contract/`), 32 enclave
-(`cargo test` in `aggregator/`) and 9 browser crypto checks (`pnpm test`). CI runs
+**276 automated tests pass**: 224 contract (`cargo test` in `contract/`), 42 enclave
+(`cargo test` in `aggregator/`) and 10 browser crypto checks (`pnpm test`). CI runs
 them on every push, with lint, typecheck, the web build, `clippy -D warnings`, a
 rebuild of both wasm files against their pinned hashes, and a scan for committed
 secrets. On top, the live smoke test runs 20 checks on testnet and the attestation
 checker runs 7 on real OutLayer jobs, including tampered copies that must fail.
 
-Each of the 19 v1 guards that protect marks or money (the 43 the v2 council adds are listed in [CLAIMS.md](docs/CLAIMS.md)) was deleted in turn to confirm
+Each of the 19 v1 guards that protect marks or money (the 43 the v2 council adds, and v2.1's 12, are listed in [CLAIMS.md](docs/CLAIMS.md)) was deleted in turn to confirm
 some test fails without it: the committed-set check (contract and enclave), the
 caller check, copied ciphertexts, one free copy per round, auditor-only audits,
 the auditor recheck on delivery, dropping removed funds, the duplicate-read
@@ -383,7 +383,7 @@ and ignoring a tally that answers an earlier close.
 | The contract reads OutLayer's real response | `outcome_maps_enclave_responses`, using the exact bytes OutLayer returned on testnet |
 | Browser, contract and enclave agree byte for byte | the set hash, commitment and sealing vectors in [`testdata/`](testdata), checked by all three |
 | Every enclave run is the published build, asked for by the contract | `pnpm --filter nema-web live:check-attest` on jobs 16942, 16947, 16954 and 16956: all checks pass |
-| The whole flow works on the live network | `pnpm --filter nema-web live:smoke`: 19 of 20 on v2 round 1 (the 20th is explained above) and `--drop` 4 of 4 on v2 round 2; 20 of 20 on v1 round 6, the current contract with the enclave loaded from FastFS (17 of 17 on round 2 with the earlier script) |
+| The whole flow works on the live network | `pnpm --filter nema-web live:smoke`: all checks on v2.1 round 3, the current contract and enclave; 19 of 20 on v2 round 1 (the 20th is explained above) and `--drop` 4 of 4 on v2 round 2; 20 of 20 on v1 round 6, the current contract with the enclave loaded from FastFS (17 of 17 on round 2 with the earlier script) |
 
 ---
 
@@ -404,7 +404,7 @@ and ignoring a tally that answers an earlier close.
 
 - **Sample mode is sample data.** The **Sample** switch fills every screen with made-up funds, rounds and reads (Calder Logistics, Kestrel Software and others), so each state can be seen without a wallet. Buying a read and submitting a mark play out on that data in the open tab, and a reload starts over. Nothing in it touches the chain.
 - **Live mode is real.** It reads `nema-dev.testnet`, and every action is a signed NEAR testnet transaction.
-- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; rounds 3 and 4 ran on the previous build (`05e0b58e…`, same logic) on 2026-11-04, round 4 with the enclave loaded from FastFS, round 5 with a fund removed before close (its mark dropped, the round failed with 3 of 4, the deposit returned); round 1 ended without a key while a contract bug was being fixed. Round 6 ran on the current, SourceScan-verified build (`248f6ca6…`) on 2026-11-12, all 20 smoke checks passing. **v2, round 1 (2026-11-13):** run on `nema-v2.testnet` after the council registered its test loan by a 2-of-3 vote. It needed three attempts to close: OutLayer's worker started each tally job about 130 seconds after the request, and NEAR stops waiting after about 121 seconds. Each time the contract recorded `CloseFailed`, kept all four marks, and refunded all but 0.001 NEAR of the fee; the third attempt published. **v2, round 2 (`smoke --drop`, 2026-11-13):** all checks passed on chain. The council removed a fund by a 2-of-3 vote after it had submitted, so its mark was dropped at close and the round failed with 3 of the required 4 funds; the closer's enclave deposit came back (about 0.0005 NEAR spent on gas); the fund re-applied, two council seats approved it, and it joined after the 5-minute veto window. A council takeover and the heartbeat have not run on chain (the 90-day silence limit makes a takeover impractical to run); their tests are in [docs/CLAIMS.md](docs/CLAIMS.md).
+- **The live rounds so far are test rounds** ("Smoke Test Co"), run by the smoke script with four funds and a lender the author controls. Round 2 is the full run above; rounds 3 and 4 ran on the previous build (`05e0b58e…`, same logic) on 2026-11-04, round 4 with the enclave loaded from FastFS, round 5 with a fund removed before close (its mark dropped, the round failed with 3 of 4, the deposit returned); round 1 ended without a key while a contract bug was being fixed. Round 6 ran on the current, SourceScan-verified build (`248f6ca6…`) on 2026-11-12, all 20 smoke checks passing. **v2, round 1 (2026-11-13):** run on `nema-v2.testnet` after the council registered its test loan by a 2-of-3 vote. It needed three attempts to close: OutLayer's worker started each tally job about 130 seconds after the request, and NEAR stops waiting after about 121 seconds. Each time the contract recorded `CloseFailed`, kept all four marks, and refunded all but 0.001 NEAR of the fee; the third attempt published. **v2, round 2 (`smoke --drop`, 2026-11-13):** all checks passed on chain. The council removed a fund by a 2-of-3 vote after it had submitted, so its mark was dropped at close and the round failed with 3 of the required 4 funds; the closer's enclave deposit came back (about 0.0005 NEAR spent on gas); the fund re-applied, two council seats approved it, and it joined after the 5-minute veto window. A council takeover and the heartbeat have not run on chain (the 90-day silence limit makes a takeover impractical to run); their tests are in [docs/CLAIMS.md](docs/CLAIMS.md). **v2.1, round 3 (2026-11-13):** the first round on the redeployed contract (`36e01373…`) and the rounded enclave (`f3173709…`). Every check passed: the round published 4 of 4, the funds' free copy and the lender's paid copy both opened to the rounded consensus 94.375 ± 1.75 and matched the commitment on chain, each fund was credited 0.02375 NEAR and each council seat 0.0016667 NEAR, and the audit opened the fund's own mark. The secret lock accepted either enclave while the project switched, and was narrowed to the new build once this round passed. Rounds 1 and 2 kept their earlier results.
 - **Testnet only.** No real money moves.
 
 ---
@@ -446,11 +446,11 @@ NEAR testnet:
 
 | What | Where |
 | --- | --- |
-| Nema contract (v2, council) | [`nema-v2.testnet`](https://testnet.nearblocks.io/address/nema-v2.testnet) · wasm sha256 `be2565537241d8de03976a54d1cd254cf448edf1baee109f39e3e25d62becd5d`, built reproducibly from [`cf10491`](https://github.com/Dami904/nema/tree/cf104915616fc6a5ae78c0697f7f6488364de5f9) in `sourcescan/cargo-near:0.21.1-rust-1.96.0` (`cd contract && cargo near build reproducible-wasm`; the contract reports this in `contract_source_metadata`, NEP-330). Built twice, the same hash both times. **[Verified on SourceScan](https://testnet.nearblocks.io/address/nema-v2.testnet?tab=contract)** on 2026-11-13: the verifier (`v2-verifier.sourcescan.testnet`) holds a record for `nema-v2.testnet` whose code hash `DoFY4ofozuNCVf5whHQQLTUrXrJVqzEVQsoBbtMyJeMz` is the deployed one (source CID `QmYnHzcBHM…AP9L`) |
+| Nema contract (v2, council) | [`nema-v2.testnet`](https://testnet.nearblocks.io/address/nema-v2.testnet) · wasm sha256 `36e01373109545d27c46a36bf0d0ab39745f18b3c5f8b90a92cb02cdf41c7694` (v2.1: the council's reader allowlist), built reproducibly from [`d8f5b58`](https://github.com/Dami904/nema/tree/d8f5b5867a1d9196251b984fe32572b758788ff3) in `sourcescan/cargo-near:0.21.1-rust-1.96.0` (`cd contract && cargo near build reproducible-wasm`; the contract reports this in `contract_source_metadata`, NEP-330). Redeployed in place on 2026-11-13, keeping the council, the funds and rounds 1 and 2. SourceScan verification of this build: pending. The earlier v2 build (`be256553…`, from `cf10491`) was [verified on SourceScan](https://testnet.nearblocks.io/address/nema-v2.testnet?tab=contract) |
 | Nema contract (v1, owner) | [`nema-dev.testnet`](https://testnet.nearblocks.io/address/nema-dev.testnet) · wasm sha256 `248f6ca67c7a058c449cb9349546a63d18b7a2ad31879bb46d09738902f0d24a`, built reproducibly from [`8475de8`](https://github.com/Dami904/nema/tree/8475de86513911a571a29d9038a8a36bdc40d00b), **[verified on SourceScan](https://testnet.nearblocks.io/address/nema-dev.testnet?tab=contract)** (code hash `3TiXJMQA…ANVf`). The rounds listed above ran on it |
 | Enclave project | OutLayer `nema-dev.testnet/nema-aggregator` |
-| Enclave build | on [FastFS](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm) (live) and the [`enclave-v2`](https://github.com/Dami904/nema/releases/tag/enclave-v2) release (standby, same bytes; `pnpm --filter nema-web live:enclave-source` checks both and switches) · wasm sha256 `3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6` (reproduces with Rust 1.96 on Windows with `CARGO_HOME=C:\Users\USER\.cargo`, since the wasm embeds that path; CI checks it) |
-| Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet]}, WasmHash(3ed58517…)]` |
+| Enclave build | on [FastFS](https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8.wasm) (live) and the [`enclave-v3`](https://github.com/Dami904/nema/releases/tag/enclave-v3) release (standby, same bytes; `pnpm --filter nema-web live:enclave-source` checks both and switches) · wasm sha256 `f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8`: rounded, trimmed results. Built by `aggregator/build.sh` in a digest-pinned Linux container, so it reproduces anywhere Docker runs; CI checks it on Ubuntu. The earlier build `3ed58517…` (exact results, Windows-only reproduction) ran every round before 2026-11-13, and the site still accepts its runs |
+| Secret lock | `And[Predecessor{Whitelist[nema-dev.testnet, nema-v2.testnet]}, WasmHash(f3173709…)]` |
 | Web app | [nema-near.vercel.app](https://nema-near.vercel.app) (Vercel, static) |
 
 ---

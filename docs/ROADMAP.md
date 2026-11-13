@@ -5,16 +5,16 @@ not, why, and in what order. Each item says which part it changes: the contract
 (a redeploy and a new verification), the enclave (a new build hash and a new
 secret lock), or neither.
 
-## Next
+## Shipped in v2.1 (2026-11-13)
 
-| Item | Changes | Why |
+| Item | Changed | What it does |
 | --- | --- | --- |
-| **Rounded result** | enclave | Today a buyer gets the mean to a hundredth and the spread to 1e-4. Two funds that collude in a four-fund round can solve for the other two marks exactly from those, and a fund that leaves between two rounds can be read off the difference. Rounding the mean to an eighth of a point (how loans are quoted anyway) and the spread to a quarter turns an exact answer into a range of about a point. |
-| **Trimmed mean** | enclave | Drop the highest and lowest marks before averaging once the panel is big enough (as LIBOR dropped its top and bottom quartiles), so one fund can't drag the consensus. It also removes the clean linear equation a differencing attack relies on. A secret-sharing design can only add numbers up; the enclave sees the marks, so it can sort them. |
-| **Reader allowlist**, off by default | contract | Lets the council vet who can buy a mark (a lender, an LP) when a panel wants that. Off by default so the open market still works. |
-| **Enclave build reproducible on Linux** | enclave | Today the enclave hash reproduces only on Windows with one specific Cargo path. A pinned container build lets anyone check the hash, and lets CI check it on every push. |
+| **Rounded result** | enclave | The mean is rounded to an eighth of a point (how loans are quoted anyway) and the spread to a quarter. Before, two funds colluding in a four-fund round could solve for the other two marks exactly, and a fund that left between rounds could be read off the difference; now each answer is a range about a point wide. |
+| **Trimmed mean** | enclave | From five funds up, the highest and lowest marks are left out of the mean (two of each from nine), as LIBOR dropped its top and bottom quartiles, so one fund can't drag the consensus. A secret-sharing design can only add numbers up; the enclave sees the marks, so it can sort them. |
+| **Reader allowlist**, off by default | contract | The council can limit paid reads to readers it approves (a vetted lender, an LP). Off by default so the open market still works. |
+| **Enclave build reproducible on Linux** | enclave | Built in a digest-pinned container (`aggregator/build.sh`), so anyone with Docker gets the same hash; CI checks it on every push. |
 
-## v2.1: one contract redeploy
+## v2.2: one contract redeploy
 
 Batched, because each contract change needs a redeploy and a new verification.
 
