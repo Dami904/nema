@@ -130,6 +130,7 @@ pnpm --filter nema-web live:check-attest --job 89480 --network testnet --contrac
 - [Tech stack](#tech-stack)
 - [Project layout](#project-layout)
 - [Run it locally](#run-it-locally)
+- [What's next](#whats-next)
 - [How it was built](#how-it-was-built)
 - [Roadmap](docs/ROADMAP.md) and [Nema next to Sputnik DAO, Trezu and NEAR AI](docs/PARTNERS.md)
 
@@ -570,6 +571,21 @@ keychain; about 0.06 NEAR in enclave fees, mostly returned by OutLayer, about 0.
 ```bash
 pnpm --filter nema-web live:smoke --opener nema-dev.testnet --lender lender.nema-dev.testnet --minutes 4
 ```
+
+---
+
+## What's next
+
+The full plan, with what each step changes, is in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+| Version | What | Why |
+| --- | --- | --- |
+| **v2.1** (live) | Rounded, trimmed results; the council's reader allowlist; the enclave built reproducibly on Linux | Blunts the subtraction attack; one wild mark can't drag the price |
+| **v2.2** (one contract redeploy) | Self-upgrade by council vote with a timelock, then **delete the full-access key**; two vote thresholds; any two funds can propose a loan; anomaly counts in the sealed copy; auditors vetted and a per-reader round cap on a limited panel | Removes the biggest trust in the system: the deployer's key |
+| **Any time** (no redeploy) | Intel revocation checks in Verify; signed site releases on IPFS; wallet- or passkey-derived reading keys; a scheduled keeper on a limited key | Closes gaps that only need the site or operations |
+| **Enclave** | Master secret rotation | One secret has run every round |
+| **v3** | Mainnet with a pilot panel of real funds; affiliation groups (four distinct firms, not four accounts); slashable membership bonds with a dispute process | Needs outside parties or a process |
+| **Not planned** | Differential privacy; open admission | Noise would make a four-fund price useless; anyone could join with many accounts |
 
 ---
 

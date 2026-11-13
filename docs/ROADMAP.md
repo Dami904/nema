@@ -29,8 +29,46 @@ Batched, because each contract change needs a redeploy and a new verification.
   needs the council less as it grows.
 - **Anomaly flags**: the enclave counts marks far from the median and says how many
   in the buyer's sealed copy, with no names.
+- **Auditors vetted on a limited panel.** With reads limited to approved readers, a
+  fund could still name any account as its auditor and read free through it. The
+  fix: on a limited panel, a fund can name only an approved reader.
+- **A takeover resets the reader list.** Today a council replaced by a takeover
+  leaves the list and the switch as they were.
+- **A cap on how many rounds one approved reader can buy for the same loan**, so a
+  reader can't stack results over a panel that barely changes. It only means
+  something with reads limited: an open market can buy through many accounts.
+
+## Without a redeploy
+
+Changes to the site, the scripts or the operations, so they can ship any time.
+
+- **Check Intel's revocation status.** The browser checks the quote's chain to
+  Intel's root and the measurements, not whether the platform's TCB has since been
+  revoked. Intel publishes that status; the Verify view would fetch and check it.
+- **Signed site releases.** A changed site could seal marks to a different key.
+  Publishing each build's hash, and serving the same files from IPFS, would let
+  anyone check the page they loaded.
+- **Stronger reading keys.** Keys live in the browser's storage today. A key derived
+  from the reader's wallet signature, or held by a passkey, would survive a cleared
+  browser and keep extensions out.
+- **A scheduled keeper with a limited key.** Settling a stuck call is open to
+  anyone, but nobody runs it on a schedule. A function-call key that can only call
+  `close_round` and the `reconcile_*` methods, with a small allowance, could run it
+  safely.
+- **Measure a large round on chain.** Tests put a 64-fund tally at 5.4 Tgas of the
+  40 Tgas a callback gets; a real 64-fund round would confirm it.
+
+## Enclave: a new build and a new secret lock
+
+- **Master secret rotation.** One secret has run every round. Rotating means a new
+  secret for new rounds while old rounds still deliver from the old one, so the
+  enclave needs to know which secret a round was opened under.
 
 ## v3: needs outside parties or a process
+
+- **Mainnet, with a pilot panel of real funds.** Only after the full-access key is
+  gone (v2.2), with real funds and lenders who agree to price one loan together.
+  Every live round so far used accounts the author controls.
 
 - **Affiliation groups.** A round would need four distinct firms, not four accounts.
   It needs someone to attest who owns which fund; self-declared groups prove
