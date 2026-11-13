@@ -6,8 +6,8 @@ Working notes, not marketing. Updated as decisions are made.
 
 | Part | Where | State |
 | --- | --- | --- |
-| Enclave module (derive key, tally, sealed delivery, audit) | `aggregator/` | Done, 32 tests, builds to wasm32-wasip2 (461 KB, sha256 `3ed58517…50d6`), active on OutLayer from FastFS, with the `enclave-v2` release as a standby copy (`pnpm live:enclave-source`) |
-| NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done. v1 is live on testnet (sha256 `248f6ca6…d24a`, a reproducible build of `8475de8`, 121 unit tests), migrated in place from each earlier build. v2, the council contract ([V2_DESIGN.md](docs/V2_DESIGN.md)), is deployed to `nema-v2.testnet` (sha256 `be256553…cd5d`, a reproducible build of `cf10491`, 210 unit tests) |
+| Enclave module (derive key, tally, sealed delivery, audit) | `aggregator/` | Done, 42 tests, rounded and trimmed results, built in a pinned Linux container (`aggregator/build.sh`) to wasm32-wasip2 (466 KB, sha256 `f3173709…4bc8`), active on OutLayer from FastFS, with the `enclave-v3` release as a standby copy (`pnpm live:enclave-source`) |
+| NEAR contract (members, applications, rounds, submissions, listing, paid and free reads, audits, earnings) | `contract/` | Done. v1 is live on testnet (sha256 `248f6ca6…d24a`, a reproducible build of `8475de8`, 121 unit tests), migrated in place from each earlier build. v2, the council contract ([V2_DESIGN.md](docs/V2_DESIGN.md)), is deployed to `nema-v2.testnet`; v2.1 adds the reader allowlist (sha256 `36e01373…7694`, a reproducible build of `d8f5b58`, 224 unit tests) |
 | Browser crypto check (eciesjs 0.5.0) | `interop/` | Done: both directions verified against the enclave code |
 | Web UI (encrypt in browser, submit, buy or claim, open the sealed copy, audit) | `web/` | Done, sample data for every state; no live call sent yet |
 
@@ -49,7 +49,7 @@ What a fund encrypts: `{"account":"<its own account>","mark":<hundredths>}`.
 The account inside stops one fund resubmitting another's ciphertext to double
 its weight.
 
-What the buyer opens: `{"count":..,"mean":"94.10","spread":"1.6324","salt":"<hex>"}`.
+What the buyer opens: `{"count":..,"mean":"94.125","spread":"1.75","method":"rounded","salt":"<hex>"}` (rounds tallied before rounding: `"mean":"94.10","spread":"1.6324"`, `"method":"exact"`).
 
 ## Keys and hashes
 

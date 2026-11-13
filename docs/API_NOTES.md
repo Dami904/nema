@@ -66,14 +66,21 @@ module saw `nema-dev.testnet`.
 The first lock whitelisted `nema-dev.testnet` as an account. A tally requested
 by a fund through the contract was denied, because the account checked was the
 fund that signed, not the contract that called. The lock now uses
-`Predecessor{Whitelist[nema-dev.testnet]}`, which checks the calling account:
+`Predecessor`, which checks the calling account (both contracts, v1 and v2):
 
 ```json
 {"Logic":{"operator":"And","conditions":[
-  {"Predecessor":{"condition":{"Whitelist":{"accounts":["nema-dev.testnet"]}}}},
-  {"WasmHash":{"hash":"3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6"}}
+  {"Predecessor":{"condition":{"Whitelist":{"accounts":["nema-dev.testnet","nema-v2.testnet"]}}}},
+  {"WasmHash":{"hash":"f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8"}}
 ]}}
 ```
+
+**A lock can accept two builds while the project switches.** `Logic` nests, and
+`Or` works: moving to the v2.1 enclave, the lock first accepted
+`Or[WasmHash(old), WasmHash(new)]`, so rounds kept working whichever version was
+active, then was narrowed to the new hash once a live round passed on it. The
+nested lock needed a larger storage deposit (0.00782 NEAR held in all; the call
+said exactly how much was missing).
 
 **`update_access` needs a storage deposit.**
 Without one it fails. 0.0003 NEAR was enough.
@@ -96,10 +103,11 @@ checked against its Intel quote in the browser.
 
 **GitHub builds are disabled on OutLayer testnet.**
 The project source is a `WasmUrl` pointing at the file on FastFS
-(`https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6.wasm`).
+(`https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8.wasm`).
 OutLayer refuses the file unless its bytes hash to the registered sha256. The
-same bytes are the `enclave-v2` GitHub release asset, which served as the
-source until 2026-11-04 and is now the standby. A version has one URL, so there
+same bytes are the `enclave-v3` GitHub release asset, the standby. (Before
+v2.1, the `enclave-v2` release held the earlier build and was the source until
+2026-11-04.) A version has one URL, so there
 is no automatic failover: if FastFS stops serving, `pnpm live:enclave-source
 github` moves the project to the release (and `fastfs` moves it back).
 
@@ -117,12 +125,14 @@ the URL, so the secret kept working; round 4 ran on it. `pnpm
 live:enclave-source` does the same three calls, after checking that the target
 host serves the right bytes.
 
-**The wasm hash depends on the build machine.**
-Panic messages embed the Cargo registry path (`C:\Users\USER\.cargo\registry\…`)
-and Windows-style workspace paths. The pinned hash reproduces with Rust 1.96 on
-Windows with `CARGO_HOME=C:\Users\USER\.cargo`; CI's `reproduce` job does exactly
-that. A Linux build of the same source gives a different hash, and the secret
-lock would refuse it.
+**The wasm hash depends on the build machine, so the build runs in a container.**
+Panic messages embed the Cargo registry path and the workspace path. The first
+builds (`3ed58517…`) came from Windows and reproduce only with
+`CARGO_HOME=C:\Users\USER\.cargo`. Path remapping is not enough to match a Linux
+build, because Windows paths keep their backslashes. Since v2.1 the enclave is
+built by `aggregator/build.sh` in a digest-pinned `rust:1.96.0-slim-bookworm`
+container, with the source at `/nema`, so the paths are the same on every machine;
+CI's `reproduce` job runs the same script on Ubuntu.
 
 **Any change to the enclave source changes the hash.**
 Even a reformat moves line numbers in panic messages. The enclave source is

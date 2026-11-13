@@ -30,10 +30,10 @@ function fakeCipher(seed: string): string {
 
 export const DEMO_SALT = toHex(new Uint8Array(32).map((_, i) => (i * 37 + 11) & 0xff));
 export const DEMO_OPENED: Record<string, Opened> = {
-  "2": { count: 4, mean: "94.10", spread: "1.6324", salt: DEMO_SALT },
-  "1": { count: 4, mean: "93.45", spread: "2.0410", salt: DEMO_SALT },
-  "7": { count: 4, mean: "97.80", spread: "0.9120", salt: DEMO_SALT },
-  "8": { count: 4, mean: "96.15", spread: "1.4875", salt: DEMO_SALT },
+  "2": { count: 4, mean: "94.125", spread: "1.75", salt: DEMO_SALT, method: "rounded" },
+  "1": { count: 4, mean: "93.500", spread: "2.00", salt: DEMO_SALT, method: "rounded" },
+  "7": { count: 4, mean: "97.750", spread: "1.00", salt: DEMO_SALT, method: "rounded" },
+  "8": { count: 4, mean: "96.125", spread: "1.50", salt: DEMO_SALT, method: "rounded" },
 };
 /** Marks the demo fund kept on its device, in hundredths. */
 export const DEMO_OWN_MARKS: Record<string, number> = { "2": 9525, "1": 9300, "7": 9750, "8": 9450 };
@@ -294,6 +294,8 @@ async function build(): Promise<Store> {
       min_contributors: 4,
       read_price: price,
       application_bond: (5n * 10n ** 22n).toString(),
+      readers_only: false,
+      readers: [],
     },
     members: FUNDS,
     rounds,

@@ -239,7 +239,7 @@ function Scatter() {
       <div className="sealchip">
         <div>
           <div className="label">Consensus</div>
-          <div className="blurnum serif" style={{ fontSize: 34, lineHeight: 1, marginTop: 8 }}>94.10</div>
+          <div className="blurnum serif" style={{ fontSize: 34, lineHeight: 1, marginTop: 8 }}>94.125</div>
         </div>
         <span className="pill tone-pub">Sealed</span>
       </div>

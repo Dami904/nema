@@ -20,17 +20,20 @@ export const REPO_URL = (env.VITE_REPO_URL as string | undefined) ?? "";
 
 /** Builds we expect on chain, so the Docs page can compare them. */
 export const BUILDS = {
-  contractWasmSha256: "be2565537241d8de03976a54d1cd254cf448edf1baee109f39e3e25d62becd5d",
+  contractWasmSha256: "36e01373109545d27c46a36bf0d0ab39745f18b3c5f8b90a92cb02cdf41c7694",
   /** The commit that build came from; `contract_source_metadata` on chain names it too. */
-  contractSourceRev: "cf104915616fc6a5ae78c0697f7f6488364de5f9",
-  enclaveWasmSha256: "3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6",
+  contractSourceRev: "d8f5b5867a1d9196251b984fe32572b758788ff3",
+  /** Rounded, trimmed results; built in the pinned container (aggregator/build.sh). */
+  enclaveWasmSha256: "f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8",
+  /** Earlier builds whose runs are still genuine: the rounds they tallied published exact results. */
+  earlierEnclaveWasmSha256: ["3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6"],
   enclaveProject: "nema-dev.testnet/nema-aggregator",
 };
 
 /** Two hosts serve the same enclave bytes; the OutLayer project loads one (`pnpm live:enclave-source`). */
 export const ENCLAVE_URLS = {
   fastfs: `https://test.fastfs.io/nema-dev.testnet/outlayer.testnet/${BUILDS.enclaveWasmSha256}.wasm`,
-  github: "https://github.com/Dami904/nema/releases/download/enclave-v2/nema-aggregator.wasm",
+  github: "https://github.com/Dami904/nema/releases/download/enclave-v3/nema-aggregator.wasm",
 };
 
 /** OutLayer's minimum deposit for one enclave call, on top of the read price. */

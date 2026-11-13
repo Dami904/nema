@@ -99,6 +99,11 @@ and old rounds stay readable by whoever holds the old one.
   on a threshold of independent nodes.
 - **Readers sharing the result.** Nema controls who can open it, not what they
   do afterwards.
+- **Colluding funds narrowing the other marks.** Two funds that share their own
+  marks and read a four-fund result learn the other two marks to within about a
+  point, not exactly: the mean is rounded to an eighth and the spread to a
+  quarter. Rounds tallied before rounding (`3ed58517…` enclave) keep their exact
+  results, and those can be solved exactly.
 - **A plausible lie.** A fund can submit a wrong mark inside the valid range.
   Only its track record and its auditor show this over time.
 - **The council admitting sock puppets.** A majority must approve and any member
@@ -119,7 +124,8 @@ and old rounds stay readable by whoever holds the old one.
 4. **Steal a reader's key from browser storage** with a malicious extension.
 5. **Average out a fund's mark across rounds.** A fund that leaves and rejoins,
    or a panel that barely changes between rounds, lets a reader of many results
-   narrow down individual marks. Not modelled or limited.
+   narrow down individual marks. Rounding makes each difference a range about a
+   point wide; many rounds can still narrow it. Not otherwise limited.
 6. **An enclave answer big enough to exhaust the callback's gas.** The contract
    reads up to 256 KiB, and the gas needed to parse that much inside 40 Tgas has
    not been measured. If a callback ran out of gas, the round, read or audit

@@ -3,11 +3,14 @@
 //! It reads one JSON request on stdin and prints one JSON response. Four actions:
 //!
 //!   derive_pubkey  the round's public key, which funds encrypt their marks to
-//!   tally          decrypt the committed submissions, compute the consensus, and
-//!                  return only the count, the rejected list and a commitment to
-//!                  the result; the mean and spread stay sealed
+//!   tally          decrypt the committed submissions, compute the consensus (a
+//!                  trimmed mean to an eighth of a point, a spread to a quarter),
+//!                  and return only the count, the rejected list and a commitment
+//!                  to the result; the mean and spread stay sealed
 //!   deliver        recompute the same result and return it encrypted to one
-//!                  buyer's key, with the salt so the buyer can check the commitment
+//!                  buyer's key, with the salt so the buyer can check the commitment.
+//!                  A round committed before rounding is delivered exactly, as it
+//!                  was committed
 //!   audit          open one fund's stored submission and return its mark encrypted
 //!                  to the auditor that fund named, so the auditor sees exactly what
 //!                  the fund sent rather than a copy the fund could have altered
@@ -27,7 +30,7 @@ mod stats;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::io::{self, Read};
-use stats::{Consensus, Outcome, Rejected};
+use stats::{Consensus, Method, Outcome, Rejected};
 
 const MASTER_ENV: &str = "PROTECTED_NEMA_MASTER";
 
@@ -79,6 +82,7 @@ struct Plain {
 
 struct Tallied {
     consensus: Consensus,
+    method: Method,
     rejected: Vec<Rejected>,
     set_hash: String,
     commitment: String,
@@ -109,6 +113,7 @@ fn tally(
     min: usize,
     expected_set_hash: &str,
     subs: &[Sub],
+    method: Method,
 ) -> Result<Tallied, Value> {
     let pairs: Vec<(String, String)> =
         subs.iter().map(|s| (s.account.clone(), s.ciphertext_hex.clone())).collect();
@@ -130,7 +135,7 @@ fn tally(
         }
     }
 
-    match stats::aggregate(&marks, min, &mut rejected) {
+    match stats::aggregate(&marks, min, &mut rejected, method) {
         Outcome::Published(consensus) => {
             let salt = crypto::result_salt(master, contract, round_id);
             let commitment = crypto::commitment(
@@ -141,7 +146,7 @@ fn tally(
                 &consensus.mean,
                 &consensus.spread,
             );
-            Ok(Tallied { consensus, rejected, set_hash, commitment, salt })
+            Ok(Tallied { consensus, method, rejected, set_hash, commitment, salt })
         }
         Outcome::BelowMinimum { valid, min } => Err(json!({
             "ok": false,
@@ -164,7 +169,7 @@ fn handle(req: Request, master: &crypto::Master, predecessor: &str) -> Value {
             }
         }
         Request::Tally { contract, round_id, min_contributors, set_hash, submissions } => {
-            match tally(master, &contract, round_id, min_contributors, &set_hash, &submissions) {
+            match tally(master, &contract, round_id, min_contributors, &set_hash, &submissions, Method::Rounded) {
                 Ok(t) => json!({
                     "ok": true,
                     "count": t.consensus.count,
@@ -184,17 +189,28 @@ fn handle(req: Request, master: &crypto::Master, predecessor: &str) -> Value {
             buyer_pubkey,
             submissions,
         } => {
-            let t = match tally(master, &contract, round_id, min_contributors, &set_hash, &submissions) {
-                Ok(t) => t,
-                Err(e) => return e,
-            };
-            if t.commitment != commitment {
-                return fail("the result does not match the published commitment");
+            // New rounds are committed rounded. A round committed before rounding
+            // existed matches only the exact result, which is what its buyers were
+            // promised. Tally never commits an exact result, so no new round can.
+            let mut found = None;
+            for method in [Method::Rounded, Method::Exact] {
+                match tally(master, &contract, round_id, min_contributors, &set_hash, &submissions, method) {
+                    Ok(t) if t.commitment == commitment => {
+                        found = Some(t);
+                        break;
+                    }
+                    Ok(_) => {}
+                    Err(e) => return e,
+                }
             }
+            let Some(t) = found else {
+                return fail("the result does not match the published commitment");
+            };
             let plain = json!({
                 "count": t.consensus.count,
                 "mean": t.consensus.mean,
                 "spread": t.consensus.spread,
+                "method": t.method.name(),
                 "salt": hex::encode(t.salt),
             });
             match crypto::seal_hex(&buyer_pubkey, plain.to_string().as_bytes()) {

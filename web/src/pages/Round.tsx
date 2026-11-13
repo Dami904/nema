@@ -253,6 +253,8 @@ function LenderView({ round }: { round: RoundT }) {
   const contributors = round.listing?.contributors.length ?? 0;
   const seats = config?.council?.length ?? 0;
   const split = splitRead(price, contributors, seats, config?.council_share_bps ?? 0);
+  // The council can limit paid reads to readers it approved.
+  const barred = !!config?.readers_only && !!accountId && !(config.readers ?? []).includes(accountId);
 
   const buy = async () => {
     if (!accountId) return signIn();
@@ -298,8 +300,8 @@ function LenderView({ round }: { round: RoundT }) {
               <span className="label" style={{ color: "var(--sage)" }}>Your key only</span>
             </div>
             <div className="nums">
-              <div><div className="label">Mean</div><span className="blurnum serif">94.10</span></div>
-              <div><div className="label">Spread</div><span className="blurnum serif">1.63</span></div>
+              <div><div className="label">Mean</div><span className="blurnum serif">94.125</span></div>
+              <div><div className="label">Spread</div><span className="blurnum serif">1.75</span></div>
               <div><div className="label">Funds</div><span className="serif">{round.listing?.count}</span></div>
             </div>
           </div>
@@ -338,10 +340,16 @@ function LenderView({ round }: { round: RoundT }) {
                 <dt>Enclave fee (OutLayer)</dt><dd>{near(ENCLAVE_FEE_YOCTO)}</dd>
                 <dt>Storage, kept by the contract</dt><dd>{near(STORAGE_DEPOSIT_YOCTO)}</dd>
               </Fees>
-              <button className="btn wide" onClick={buy} disabled={busy} aria-disabled={busy}>
-                {busy ? "Waiting for your wallet…" : accountId ? `Buy a read · ${near(price + READ_EXTRA_YOCTO)}` : "Connect wallet to buy"}
-              </button>
-              <p className="hint" style={{ marginTop: 8 }}>If the enclave fails, the read price comes back to you.</p>
+              {barred ? (
+                <p className="note">This panel sells reads only to readers its council approved. A council member can propose your account on the Panel page.</p>
+              ) : (
+                <>
+                  <button className="btn wide" onClick={buy} disabled={busy} aria-disabled={busy}>
+                    {busy ? "Waiting for your wallet…" : accountId ? `Buy a read · ${near(price + READ_EXTRA_YOCTO)}` : "Connect wallet to buy"}
+                  </button>
+                  <p className="hint" style={{ marginTop: 8 }}>If the enclave fails, the read price comes back to you.</p>
+                </>
+              )}
             </>
           )}
         </>
@@ -449,7 +457,7 @@ function OpenedResult({ round, opened, byRound }: { round: RoundT; opened: Opene
         <span className="serif mean">{opened.mean}</span>
         <span className="serif spread">± {spread.toFixed(2)}</span>
       </div>
-      <p className="muted" style={{ fontSize: 13 }}>Mean and one standard deviation, in points of par, from {opened.count} funds.</p>
+      <p className="muted" style={{ fontSize: 13 }}>{methodNote(opened)}</p>
       <Gauge mean={mean} spread={spread} own={ownPrice} />
       {z !== undefined && (
         <div className="stand">
@@ -469,6 +477,14 @@ function OpenedResult({ round, opened, byRound }: { round: RoundT; opened: Opene
       {purchase && <ExportRound round={round} opened={opened} purchase={purchase} />}
     </div>
   );
+}
+
+/** How the enclave turned the marks into this result. */
+function methodNote(opened: Opened): string {
+  if (opened.method !== "rounded") return `Mean and one standard deviation, in points of par, from ${opened.count} funds.`;
+  const trim = Math.floor((opened.count - 1) / 4);
+  const mean = trim > 0 ? `The mean of the middle ${opened.count - 2 * trim} of ${opened.count} marks (the ${trim === 1 ? "highest and lowest are" : `${trim} highest and ${trim} lowest are`} left out)` : `The mean of all ${opened.count} marks`;
+  return `${mean}, to the nearest eighth of a point, and the spread of all ${opened.count}, to the nearest quarter. Rounding keeps any one fund's mark from being worked out from results like this one.`;
 }
 
 function VerifyView({ round }: { round: RoundT }) {

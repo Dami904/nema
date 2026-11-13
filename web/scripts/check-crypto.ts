@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { PrivateKey, decrypt } from "eciesjs";
 import { base58ToHex, commitment, fromHex, setHash } from "../src/lib/hashes.ts";
 import { openSealed, sealMark } from "../src/lib/keys.ts";
+import { roundedConsensus } from "../src/lib/consensus.ts";
 import { splitRead } from "../src/lib/split.ts";
 
 const expected = readFileSync(new URL("../../testdata/set_hash_vector.txt", import.meta.url), "utf8").trim();
@@ -47,3 +48,16 @@ if (split.perSeat !== want.perSeat || split.perFund !== want.perFund || split.re
   throw new Error(`read split: ${split.perSeat} ${split.perFund} ${split.remainder}`);
 if (split.perSeat * 3n + split.perFund * 4n + split.remainder !== 10n ** 23n + 7n) throw new Error("read split loses or makes yocto");
 console.log("a read fee splits as the contract pays it (council share, funds, remainder)");
+
+// The rounded consensus matches the enclave's own test vectors (aggregator/src/stats.rs).
+const vectors: [number[], string, string][] = [
+  [[9175, 9500, 9300, 9650, 9425], "94.125", "1.75"],
+  [[9000, 9100, 9200, 9500], "92.000", "1.75"],
+  [[9400, 9400, 9400, 9425], "94.125", "0.00"],
+  [[9000, 9000, 9025, 9025], "90.125", "0.25"],
+];
+for (const [marks, mean, spread] of vectors) {
+  const c = roundedConsensus(marks);
+  if (c.mean !== mean || c.spread !== spread) throw new Error(`rounded consensus of ${marks}: ${c.mean} ± ${c.spread}, want ${mean} ± ${spread}`);
+}
+console.log("the rounded, trimmed consensus matches the enclave's vectors");

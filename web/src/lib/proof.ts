@@ -31,7 +31,7 @@ export const KIND_LABEL: Record<RunKind, string> = {
 
 type Mine = { purchases: Purchase[]; audits: AuditCopy[] };
 
-const expect = { contract: CONFIG.contract, project: BUILDS.enclaveProject, wasmSha256: BUILDS.enclaveWasmSha256 };
+const expect = { contract: CONFIG.contract, project: BUILDS.enclaveProject, wasmSha256: BUILDS.enclaveWasmSha256, earlierWasm: BUILDS.earlierEnclaveWasmSha256 };
 
 export async function runsForRound(round: Round, accounts: string[], mine: Mine): Promise<Run[]> {
   const jobs = new Map<number, Job>();

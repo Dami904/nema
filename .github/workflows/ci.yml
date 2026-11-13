@@ -60,25 +60,16 @@ jobs:
       - run: cargo test --locked -p nema-aggregator
       - run: cargo build --locked -p nema-aggregator --release --target wasm32-wasip2
 
-  # The deployed enclave build embeds the builder's Cargo registry path in panic
-  # messages, so its hash reproduces only on Windows with this Cargo home.
+  # The deployed enclave is built in the pinned container aggregator/build.sh
+  # names, so its hash reproduces anywhere Docker runs.
   reproduce:
-    runs-on: windows-latest
-    env:
-      CARGO_HOME: C:\Users\USER\.cargo
-    defaults:
-      run:
-        shell: bash
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          mkdir -p "$CARGO_HOME"
-          rustup toolchain install
       - name: Enclave wasm matches the hash the secret lock pins
         run: |
-          cargo build --locked -p nema-aggregator --release --target wasm32-wasip2
+          built=$(bash aggregator/build.sh | tail -1 | cut -d' ' -f1)
           pinned=$(sed -nE 's/.*enclaveWasmSha256: "([0-9a-f]{64})".*/\1/p' web/src/lib/config.ts)
-          built=$(sha256sum target/wasm32-wasip2/release/nema-aggregator.wasm | cut -d' ' -f1)
           echo "pinned $pinned"; echo "built  $built"
           test -n "$pinned" && test "$pinned" = "$built"
 

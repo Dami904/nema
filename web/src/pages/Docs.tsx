@@ -290,7 +290,11 @@ function RoundsSection() {
       </Callout>
       <p>
         Marks are integers in hundredths of a point, from 0 to 200.00. The enclave drops out-of-range, undecryptable and copied submissions and
-        names them, so one bad fund can't spoil a round. The result is the mean and one standard deviation, computed exactly with integers.
+        names them, so one bad fund can't spoil a round. From five funds up, the highest and lowest marks are left out of the mean (two of each
+        from nine), so one fund can't drag the price. The mean is rounded to the nearest eighth of a point, the way loans are quoted, and the
+        spread to the nearest quarter, all in integer arithmetic. An exact mean and spread would let two funds that share their own marks solve
+        for the other two in a four-fund round; rounded, each answer is a range about a point wide. Rounds tallied before rounding keep the exact
+        result they were committed to.
       </p>
     </Section>
   );
@@ -382,7 +386,7 @@ function ContractRef() {
   const read = near(READ_EXTRA_YOCTO);
   const calls = [
     { m: "submit(round_id, ciphertext_hex)", who: "Panel fund", cost: "0.03 NEAR for storage; the unused part comes back" },
-    { m: "buy_read(round_id, buyer_pubkey)", who: "Anyone", cost: `Read price + ${read} (enclave + storage)` },
+    { m: "buy_read(round_id, buyer_pubkey)", who: "Anyone, or only readers the council approved if it limited reads", cost: `Read price + ${read} (enclave + storage)` },
     { m: "claim_read(round_id, buyer_pubkey)", who: "Counted funds, and auditors named before the deadline; once per round", cost: read },
     { m: "request_audit(round_id, fund, auditor_pubkey)", who: "The auditor that fund named, after the deadline", cost: read },
     { m: "apply(auditor?, note?) · withdraw_application()", who: "Anyone not on the panel", cost: "0.05 NEAR bond, returned" },

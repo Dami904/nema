@@ -1,12 +1,13 @@
 # What is enforced, and where
 
 Each claim below names the tests that fail if it stops being true. Contract tests
-are in [`contract/src/tests.rs`](../contract/src/tests.rs) (210 on this branch),
+are in [`contract/src/tests.rs`](../contract/src/tests.rs) (224),
 enclave tests in [`aggregator/src/tests.rs`](../aggregator/src/tests.rs), and the
 live checks in [`web/scripts/`](../web/scripts). Run them with `cd contract && cargo
 test`, `cargo test -p nema-aggregator` and `pnpm --dir web test`.
 
-Rows marked **v2** are about the council contract on the `v2-council` branch.
+Rows marked **v2** are about the council contract; **v2.1** rows are the rounded
+result and the reader allowlist.
 
 ## Privacy
 
@@ -21,6 +22,12 @@ Rows marked **v2** are about the council contract on the `v2-council` branch.
 | The enclave tallies exactly the set the contract committed to | `a_tally_of_a_different_set_is_refused_and_the_close_can_be_retried`, `set_hash_matches_the_enclaves_fixed_vector`, `set_hash_ignores_order_but_not_content` · enclave `tally_refuses_a_set_other_than_the_committed_one` |
 | A delivery for another commitment or set is refused | `a_delivery_for_another_commitment_is_refunded`, `a_delivery_for_another_set_is_refunded` · enclave `deliver_refuses_a_commitment_that_does_not_match`, `deliver_refuses_a_different_set` |
 | An auditor opens only its own fund's mark | `nobody_else_can_audit_a_fund`, `the_named_auditor_gets_the_funds_own_submission_sealed`, `a_cleared_auditor_loses_access` · enclave `audit_refuses_a_ciphertext_made_for_another_account` |
+| **v2.1** Every new tally commits a trimmed mean rounded to an eighth and a spread rounded to a quarter, never the exact result | enclave `tally_commits_the_rounded_result_never_the_exact_one`, `spec_example_rounded`, `rounded_matches_floating_point_on_random_rounds` · `pnpm test` ("the rounded, trimmed consensus matches the enclave's vectors") |
+| **v2.1** Two colluding funds in a four-fund round can't solve for the other two marks | enclave `two_colluders_cannot_solve_a_rounded_four_fund_round` (and `two_colluders_solve_an_exact_four_fund_round`, why exact was retired) |
+| **v2.1** One wild mark can't drag the mean, from five funds up | enclave `one_wild_mark_cannot_drag_the_rounded_mean`, `trimming_drops_one_from_each_end_from_five_funds` |
+| **v2.1** A round committed before rounding is still delivered as it was committed | enclave `a_round_committed_before_rounding_is_delivered_as_committed` |
+| **v2.1** If the council limits reads, only approved readers can buy; counted funds and their auditors still read free | `a_limited_panel_refuses_an_unapproved_buyer`, `an_approved_reader_can_buy_on_a_limited_panel`, `a_removed_reader_can_no_longer_buy`, `a_contributing_fund_still_reads_free_on_a_limited_panel`, `reads_are_open_to_anyone_by_default` |
+| **v2.1** Reader changes need a council majority, and stored proposals stay readable | `one_council_member_cannot_limit_reads_alone`, `a_stale_reader_proposal_fails_cleanly`, `reader_proposals_keep_older_proposals_readable` |
 | A fund removed before the close doesn't count | `a_fund_removed_before_the_close_does_not_count`, `removing_enough_funds_fails_the_round_at_close` |
 
 ## Money
@@ -118,6 +125,23 @@ test failed every time, and the line was put back.
 | A takeover clearing the old proposals | 1 test failed |
 | A takeover clearing the old approvals | 1 test failed |
 | A leaving seat's votes and approvals dropped | 1 test failed |
+
+The same was done for v2.1's 12 guards:
+
+| Guard removed (v2.1) | Result |
+| --- | --- |
+| Trimming (enclave) | tests failed |
+| Rounding the mean to an eighth (enclave) | tests failed |
+| Rounding the spread to a quarter (enclave) | tests failed |
+| Tally committing the rounded result, not the exact one (enclave) | tests failed |
+| Delivering a pre-rounding round exactly (enclave) | tests failed |
+| Delivery checking the commitment (enclave) | tests failed |
+| `buy_read` checking the allowlist | tests failed |
+| No duplicate readers | tests failed |
+| The 128-reader cap | tests failed |
+| Turning the limit on | tests failed |
+| Turning the limit off | tests failed |
+| Removing a reader | tests failed |
 
 ## What no test here can show
 
