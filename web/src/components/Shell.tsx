@@ -38,7 +38,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <a href="#main" className="skip">Skip to content</a>
       <Banners />
       <header className="nav">
-        <Link to="/" className="brand" aria-label="Nema home">Nema<span className="seal" aria-hidden="true">.</span></Link>
+        <Link to="/" className="brand" aria-label="Nema home"><img className="mark" src="/logo.svg" alt="" width="28" height="28" /><span>Nema<span className="seal" aria-hidden="true">.</span></span></Link>
         <nav className="links" aria-label="Main navigation">
           {links.map((l) => (
             <NavLink key={l.to} to={l.to}>{l.label}</NavLink>
@@ -168,7 +168,7 @@ function Footer() {
     <footer className="foot">
       <div className="wrap foot-top">
         <div className="foot-brand">
-          <Link to="/" className="brand">Nema<span className="seal" aria-hidden="true">.</span></Link>
+          <Link to="/" className="brand"><img className="mark" src="/logo.svg" alt="" width="36" height="36" /><span>Nema<span className="seal" aria-hidden="true">.</span></span></Link>
           <p className="muted">Private consensus marks for private loans. Funds agree on a price without showing each other their numbers.</p>
         </div>
         {cols.map((c) => (
