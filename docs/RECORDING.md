@@ -4,7 +4,8 @@ Site: https://nema-near.vercel.app (NEAR testnet). Record silently. The voice,
 music and captions go on afterwards. Record each clip as its own file
 (`1-apply.mp4`, `2-seal.mp4`, …), so a retake costs one clip, not the whole run.
 
-The clips follow one real round, from four points of view:
+The clips follow one real round on the live contract, `nema-v2.testnet`, from four
+points of view. Rounds 1 to 3 are taken, so the new round is 04:
 
 | Clip | Who | Where it fits in the film |
 | --- | --- | --- |
@@ -46,31 +47,31 @@ the read-only note. Under **Join the panel**, put `nemaauditor.testnet` in
 the council**. Tell me "applied".
 
 > **Claude:** `pnpm live:demo-round approve --account nemalender.testnet`
-> then `pnpm live:demo-round open --minutes 20` (round 7, closes in 20 minutes).
+> then `pnpm live:demo-round open --minutes 20` (round 4, closes in 20 minutes).
 
 **Clip 2. Admitted, and the round opens (about 20 s).**
-Reload **Panel**: `nemalender` is now on the panel. Go to **Rounds**: round 07
+Reload **Panel**: `nemalender` is now on the panel. Go to **Rounds**: round 04
 (Harbor Freight Logistics, Senior term loan B) is **Open**.
 
 **Clip 3. Seal a mark (about 40 s). The key moment of the fund clip.**
-Open round 07, **Fund** view. Type `94.80` in **Price, in points of par**. Pause
+Open round 04, **Fund** view. Type `94.80` in **Price, in points of par**. Pause
 on the line "Encrypted in your browser before it leaves". Tick **Keep my mark on
 this device**. Press **Seal and submit**, approve. Then open your submit
 transaction on NearBlocks (wallet pop-up link, or the account's history):
 the argument is a long hex string, and 94.80 appears nowhere. Tell me "sealed".
 
-> **Claude:** `pnpm live:demo-round marks --round 7` (fund1–4 seal and submit
+> **Claude:** `pnpm live:demo-round marks --round 4` (fund1–4 seal and submit
 > their marks, so the round has five).
 
 **Clip 4. Close and read the result for free (about 60 s, after the deadline).**
-When the 20 minutes are up, open round 07. Press **Close the round** and approve
+When the 20 minutes are up, open round 04. Press **Close the round** and approve
 (anyone can close; the 0.01 NEAR enclave fee mostly comes back). Wait for
 **Published** (under a minute). Go to **Result**: "Your mark counted". Press
 **Open your free copy · 0.03 NEAR**, approve, and back up the key when asked.
 The mean and spread unseal. Pause on the result and on **Where your marks sat**
 in **Vault** (your 94.80 next to the consensus). Tell me "read".
 
-> **Claude:** `pnpm live:demo-round read --round 7` (the lender pays 0.1 NEAR for a read).
+> **Claude:** `pnpm live:demo-round read --round 4` (the lender pays 0.1 NEAR for a read).
 
 **Clip 5. Paid for contributing (about 30 s).**
 Go to **Vault**. **Earnings to withdraw** shows 0.02 NEAR: the lender's 0.1 NEAR
@@ -79,7 +80,7 @@ wallet.
 
 ## Clip 6. The auditor (about 60 s)
 
-Disconnect, then connect `nemaauditor.testnet`. Open round 07, **Result**: "You
+Disconnect, then connect `nemaauditor.testnet`. Open round 04, **Result**: "You
 audit nemalender", press **Open your free copy**, approve, and the result
 unseals. Go to **Audit**: "What your client sent, and what came back". Under
 `nemalender`, press **Open what nemalender sent · 0.03 NEAR**, approve. It shows
@@ -87,12 +88,12 @@ unseals. Go to **Audit**: "What your client sent, and what came back". Under
 
 ## Clip 7. Anyone, no wallet: what stays private (about 60 s)
 
-Disconnect the wallet. Open round 07, **Verify**:
+Disconnect the wallet. Open round 04, **Verify**:
 - the set hash on chain and the one your browser recomputes: the same;
 - **count 5** and the **commitment**, with no mean or spread anywhere on chain;
 - scroll to the enclave runs and wait for each ✓ (up to 30 seconds).
 
-Then open https://testnet.nearblocks.io/address/nema-dev.testnet?tab=contract:
+Then open https://testnet.nearblocks.io/address/nema-v2.testnet?tab=contract:
 the contract shows as verified (SourceScan). Leave out blank tabs and loading
 screens. Pause on each page only once it has loaded.
 

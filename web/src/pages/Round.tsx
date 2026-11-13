@@ -486,7 +486,7 @@ function methodNote(opened: Opened, roundId: string): string {
   if (opened.method !== "rounded") return `Mean and one standard deviation, in points of par, from ${opened.count} funds.`;
   const trim = Math.floor((opened.count - 1) / 4);
   const mean = trim > 0 ? `The mean of the middle ${opened.count - 2 * trim} of ${opened.count} marks (the ${trim === 1 ? "highest and lowest are" : `${trim} highest and ${trim} lowest are`} left out)` : `The mean of all ${opened.count} marks`;
-  return `${mean}, to the nearest eighth of a point, and the spread of all ${opened.count}, to the nearest quarter. Rounding keeps any one fund's mark from being worked out from results like this one.`;
+  return `${mean}, to the nearest eighth of a point, and the spread of all ${opened.count}, to the nearest quarter. Rounding means funds that pool their own marks can place the others only to within about a point, not solve for them.`;
 }
 
 function VerifyView({ round }: { round: RoundT }) {
