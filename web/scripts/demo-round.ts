@@ -6,6 +6,8 @@
 //   pnpm live:demo-round open --minutes 20                   registers the loan if needed, opens a round
 //   pnpm live:demo-round marks --round 7                     fund1-4 seal and submit marks
 //   pnpm live:demo-round read --round 7                      the lender buys a read
+//   pnpm live:demo-round vote                                a second council seat votes yes on open proposals
+//   pnpm live:demo-round auditor --fund f --auditor a|none   a test fund names (or clears) its auditor
 //
 // Costs: open 0.01 NEAR (the enclave fee), marks 0.03 NEAR per fund, a read the
 // read price plus 0.03 NEAR. OutLayer returns most of each enclave fee.
@@ -14,8 +16,8 @@ import { PrivateKey } from "eciesjs";
 import { ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO, SUBMIT_DEPOSIT_YOCTO } from "../src/lib/config";
 import { encodeLoan } from "../src/lib/loan";
 import { sealMark } from "../src/lib/keys";
-import type { Config, Purchase, Round } from "../src/lib/types";
-import { allRounds, approveAndAdmit, arg, BASE, call, FUNDS, LENDER, registerLoan, until, view } from "./cli";
+import type { Config, Proposal, Purchase, Round } from "../src/lib/types";
+import { allRounds, approveAndAdmit, arg, BASE, call, COUNCIL_SIGNERS, FUNDS, LENDER, registerLoan, until, view } from "./cli";
 
 /** Anyone on the panel or the council may open a round; this one signs as the first council seat. */
 const opener = arg("opener", BASE);
@@ -66,7 +68,22 @@ if (step === "approve") {
   call(lender, "buy_read", { round_id: Number(id), buyer_pubkey: pk }, BigInt(config.read_price) + READ_EXTRA_YOCTO, 300);
   const p = await until("the read", async () => (await view<Purchase[]>("get_purchases_of", { buyer: lender })).find((x) => x.buyer_pubkey === pk), (x) => !!x && x.status !== "Pending");
   console.log(`${lender}'s read: ${p!.status}${p!.error ? ` (${p!.error})` : ""}`);
+} else if (step === "vote") {
+  // The scripts' seats vote yes on every open proposal they haven't voted on, so a
+  // proposal made in the app passes once enough seats agree.
+  for (const p of await view<Proposal[]>("get_proposals")) {
+    const signer = COUNCIL_SIGNERS.find((s) => !p.votes.includes(s));
+    if (!signer) continue;
+    call(signer, "vote", { proposal_id: p.id }, 0n, 60);
+    console.log(`${signer} voted for proposal ${p.id}`);
+  }
+} else if (step === "auditor") {
+  const fund = arg("fund", "");
+  const auditor = arg("auditor", "");
+  if (!funds.includes(fund) || !auditor) throw new Error("--fund (one of fund1-4) and --auditor (an account, or none) are required");
+  call(fund, "set_auditor", { auditor: auditor === "none" ? null : auditor }, 0n, 30);
+  console.log(auditor === "none" ? `${fund} cleared its auditor` : `${fund} named ${auditor} as its auditor`);
 } else {
-  console.log("usage: pnpm live:demo-round approve|open|marks|read [--account a] [--minutes n] [--round id]");
+  console.log("usage: pnpm live:demo-round approve|open|marks|read|vote|auditor [--account a] [--minutes n] [--round id] [--fund f --auditor a|none]");
   process.exit(1);
 }
