@@ -1,8 +1,9 @@
 # Nema v2: council governance
 
-Status: design, on the `v2-council` branch. Nothing here is deployed. v1 stays live
-on `nema-dev.testnet`; v2 deploys to `nema-v2.testnet` with fresh state, so no
-migration touches v1's rounds.
+Status: deployed. v2 runs on `nema-v2.testnet` (started with fresh state, so no
+migration touched v1's rounds), and v2.1 was redeployed over it in place; v1 stays
+live on `nema-dev.testnet`. This page is the design as written before deployment;
+items marked shipped are live.
 
 ## The problem v1 leaves open
 

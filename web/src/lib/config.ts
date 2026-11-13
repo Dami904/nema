@@ -27,6 +27,12 @@ export const BUILDS = {
   enclaveWasmSha256: "f317370983fab3385e1f60c2c4958a4fccb935e030fcf06c35b9f6e9b0514bc8",
   /** Earlier builds whose runs are still genuine: the rounds they tallied published exact results. */
   earlierEnclaveWasmSha256: ["3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6"],
+  /**
+   * The last round on the contract that the earlier builds ran. A run of an earlier
+   * build on a later round fails the check, so a switch back to the exact enclave
+   * can't pass as genuine.
+   */
+  earlierEnclaveLastRound: 2,
   enclaveProject: "nema-dev.testnet/nema-aggregator",
 };
 
