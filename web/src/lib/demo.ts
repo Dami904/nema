@@ -9,7 +9,7 @@ import type { Application, AuditCopy, AuditOpened, Config, Opened, Purchase, Rej
 
 const MIN = 60_000;
 const ns = (ms: number) => (BigInt(Math.round(ms)) * 1_000_000n).toString();
-const suffix = `.${CONFIG.contract}`;
+const suffix = `.${CONFIG.accountsBase}`;
 const fund = (n: number) => `fund${n}${suffix}`;
 // The same four funds as the live panel.
 const FUNDS = [1, 2, 3, 4].map(fund);

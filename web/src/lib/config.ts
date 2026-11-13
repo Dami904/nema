@@ -6,7 +6,9 @@ export const CONFIG = {
   rpc: (env.VITE_NEAR_RPC as string | undefined) ?? "https://rpc.testnet.fastnear.com",
   /** Keeps old transactions; the ordinary RPC drops them after a few days. */
   archivalRpc: (env.VITE_NEAR_ARCHIVAL_RPC as string | undefined) ?? "https://archival-rpc.testnet.fastnear.com",
-  contract: (env.VITE_NEMA_CONTRACT as string | undefined) ?? "nema-dev.testnet",
+  contract: (env.VITE_NEMA_CONTRACT as string | undefined) ?? "nema-v2.testnet",
+  /** The account the test funds, lender and council seats are sub-accounts of. */
+  accountsBase: (env.VITE_NEMA_ACCOUNTS as string | undefined) ?? "nema-dev.testnet",
   explorerTx: (env.VITE_EXPLORER_TX as string | undefined) ?? "https://testnet.nearblocks.io/txns/",
   explorerAccount: (env.VITE_EXPLORER_ACCOUNT as string | undefined) ?? "https://testnet.nearblocks.io/address/",
   /** Lists an account's recent transactions, to find one a wallet lost track of. */
@@ -18,9 +20,9 @@ export const REPO_URL = (env.VITE_REPO_URL as string | undefined) ?? "";
 
 /** Builds we expect on chain, so the Docs page can compare them. */
 export const BUILDS = {
-  contractWasmSha256: "248f6ca67c7a058c449cb9349546a63d18b7a2ad31879bb46d09738902f0d24a",
+  contractWasmSha256: "be2565537241d8de03976a54d1cd254cf448edf1baee109f39e3e25d62becd5d",
   /** The commit that build came from; `contract_source_metadata` on chain names it too. */
-  contractSourceRev: "8475de86513911a571a29d9038a8a36bdc40d00b",
+  contractSourceRev: "cf104915616fc6a5ae78c0697f7f6488364de5f9",
   enclaveWasmSha256: "3ed58517795dc12a8f749b4ce92c747a47cbdb7ded3d383465d042060fe750d6",
   enclaveProject: "nema-dev.testnet/nema-aggregator",
 };

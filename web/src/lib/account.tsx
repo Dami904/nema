@@ -6,11 +6,11 @@ import { DEMO_AUDITOR, DEMO_COUNCIL, DEMO_LENDER, simulate } from "./demo";
 import { useWallet, type Call } from "./wallet";
 
 export const DEMO_PERSONAS = [
-  { id: `fund1.${CONFIG.contract}`, role: "Fund" },
-  { id: `fund2.${CONFIG.contract}`, role: "Fund" },
+  { id: `fund1.${CONFIG.accountsBase}`, role: "Fund" },
+  { id: `fund2.${CONFIG.accountsBase}`, role: "Fund" },
   { id: DEMO_LENDER, role: "Lender" },
   { id: DEMO_AUDITOR, role: "Auditor" },
-  { id: `applicant.${CONFIG.contract}`, role: "Applicant" },
+  { id: `applicant.${CONFIG.accountsBase}`, role: "Applicant" },
   { id: DEMO_COUNCIL[0], role: "Council" },
 ];
 
