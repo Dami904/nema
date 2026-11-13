@@ -21,6 +21,15 @@ export const TRUST = [
   "A mark you choose to keep on this device is stored there in plain form, so you can see where it sat. Leave the box unticked on a shared computer.",
 ];
 
+/** What comes after v2.1, in order (docs/ROADMAP.md has the detail). */
+export const NEXT = [
+  { when: "v2.2", what: "Self-upgrade by council vote, with a timelock, then the contract account's full-access key is deleted. Also two vote thresholds, loans proposed by any two funds, an anomaly count in each sealed copy, and on a limited panel, vetted auditors and a cap on rounds per reader." },
+  { when: "Any time", what: "Intel revocation checks in Verify, signed site releases on IPFS, reading keys derived from your wallet or a passkey, and a scheduled keeper on a key that can only settle stuck calls." },
+  { when: "Enclave", what: "Rotating the master secret, so new rounds use a new one while old rounds still deliver." },
+  { when: "v3", what: "Mainnet with a pilot panel of real funds, affiliation groups so a round needs four distinct firms, and slashable membership bonds with a dispute process." },
+  { when: "Not planned", what: "Differential privacy, because noise big enough to matter would make a four-fund price useless, and open admission, because anyone could join with many accounts." },
+];
+
 export const FAQ = [
   {
     q: "Can the council, or whoever deployed the contract, read the marks?",

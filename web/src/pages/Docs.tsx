@@ -4,7 +4,7 @@ import { useToast } from "../components/Toaster";
 import { useChain } from "../lib/chain";
 import { NET } from "../lib/attest";
 import { BUILDS, CONFIG, ENCLAVE_FEE_YOCTO, READ_EXTRA_YOCTO } from "../lib/config";
-import { FAQ, TRUST, WHO_SEES_WHAT } from "../lib/content";
+import { FAQ, NEXT, TRUST, WHO_SEES_WHAT } from "../lib/content";
 import { near, short } from "../lib/format";
 import { base58ToHex } from "../lib/hashes";
 import { viewAccount } from "../lib/near";
@@ -14,7 +14,7 @@ const SECTIONS = [
   { group: "Start here", items: [{ id: "overview", title: "Overview" }, { id: "quick-start", title: "Quick start" }] },
   { group: "Understand", items: [{ id: "rounds", title: "How a round works" }, { id: "who-sees-what", title: "Who sees what" }, { id: "trust", title: "Trust model" }] },
   { group: "Verify", items: [{ id: "verify", title: "Verify it yourself" }] },
-  { group: "Reference", items: [{ id: "contract", title: "Contract methods" }, { id: "enclave", title: "Enclave interface" }, { id: "faq", title: "FAQ" }] },
+  { group: "Reference", items: [{ id: "contract", title: "Contract methods" }, { id: "enclave", title: "Enclave interface" }, { id: "faq", title: "FAQ" }, { id: "next", title: "What's next" }] },
 ];
 const FLAT = SECTIONS.flatMap((g) => g.items);
 
@@ -97,6 +97,7 @@ export default function Docs() {
         <ContractRef />
         <EnclaveRef />
         <Faq />
+        <Next />
         <nav className="docs-pager" aria-label="Previous and next section">
           {i > 0 ? <button onClick={() => go(FLAT[i - 1].id)}><span className="label">Previous</span>{FLAT[i - 1].title}</button> : <span />}
           {i < FLAT.length - 1 && <button className="next" onClick={() => go(FLAT[i + 1].id)}><span className="label">Next</span>{FLAT[i + 1].title}</button>}
@@ -119,6 +120,7 @@ const KEYWORDS: Record<string, string> = {
   contract: "methods gas deposit fee call view api",
   enclave: "tally deliver derive pubkey json input output",
   faq: "questions",
+  next: "roadmap plan future upgrade mainnet key delete rotation v2.2 v3",
 };
 
 function useScrollSpy(ids: string[]): string {
@@ -470,6 +472,22 @@ function Faq() {
           </details>
         ))}
       </div>
+    </Section>
+  );
+}
+
+function Next() {
+  return (
+    <Section id="next" eyebrow="Reference" title={<>What's <em>next</em></>}>
+      <p>v2.1 is live: rounded, trimmed results and the council's reader allowlist. What comes after it, in order:</p>
+      <dl className="next">
+        {NEXT.map((n) => (
+          <div key={n.when}>
+            <dt>{n.when}</dt>
+            <dd>{n.what}</dd>
+          </div>
+        ))}
+      </dl>
     </Section>
   );
 }

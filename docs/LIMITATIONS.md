@@ -4,14 +4,17 @@ What Nema does not do yet, or does only partly. Each item says why.
 
 ## Not done
 
+What is planned for each item, and in what order, is in [ROADMAP.md](ROADMAP.md).
+
 - **Testnet only.** Nothing has run on mainnet, and no real money has moved.
 - **The contract account still has a full-access key.** Whoever holds it can
   redeploy the contract or change the enclave's secret lock, and with either can
   expose marks. Removing the key is permanent, so it waits for the final deploy.
   See [THREAT_MODEL.md](THREAT_MODEL.md).
-- **The live rounds are test rounds.** Rounds 2, 3 and 4 ran in full with four
-  funds, a lender and an auditor, and round 5 tested a fund removed before close,
-  but all of them are accounts the author controls.
+- **The live rounds are test rounds.** On v2.1, round 3 ran in full with four funds,
+  a council, a lender and an auditor; v2's round 2 tested a fund removed before
+  close; v1 ran the same flow on `nema-dev.testnet`. All of them use accounts the
+  author controls.
 - **One OutLayer project, one master secret, no rotation.** A new secret means new
   round keys; old rounds stay tied to the old secret.
 - **No limit on how many rounds a reader can combine.** Results from many rounds
