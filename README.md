@@ -531,7 +531,7 @@ nema/
 │  └─ scripts/    smoke, close-rounds, check-attest, check-crypto, cli
 ├─ interop/       browser ↔ enclave encryption check (manual; regenerates vectors)
 ├─ testdata/      vectors shared by the contract, enclave and browser
-├─ docs/          threat model, limitations, OutLayer API notes, demo run-of-show
+├─ docs/          threat model, limitations, claims, roadmap, OutLayer API notes
 ├─ .github/       CI: web checks, contract, enclave, wasm hashes, secret scan
 ├─ DESIGN.md      the design in full
 └─ Cargo.toml     workspace root, so OutLayer builds the enclave from here
