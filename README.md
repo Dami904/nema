@@ -23,11 +23,7 @@ Built for the NEAR Hackathon · Privacy & Private AI track.
 
 ## Demo video
 
-[![Nema demo: one loan priced by five funds on NEAR testnet, 3 minutes 24 seconds](
-
-https://github.com/user-attachments/assets/844a7376-d7a1-4bf7-8433-0f020b6bed27
-
-)](https://youtu.be/QzmEfXt_7zY)
+[![Nema demo: one loan priced by five funds on NEAR testnet, 3 minutes 24 seconds](https://github.com/user-attachments/assets/844a7376-d7a1-4bf7-8433-0f020b6bed27)](https://youtu.be/QzmEfXt_7zY)
 
 **[Watch the demo on YouTube](https://youtu.be/QzmEfXt_7zY)** (3:24): one loan priced by five funds on NEAR testnet, from the council vote to the audit. Or [judge it in 90 seconds](#judge-it-in-90-seconds) on the live app.
 
@@ -175,6 +171,11 @@ Each piece does real work. None is decorative.
 | **OutLayer attestations** | Each run's Intel TDX quote, checked in the browser: Intel's chain, the task hash, the worker image, Nema's build hash, the requesting contract | [`web/src/lib/attest.ts`](web/src/lib/attest.ts) |
 | **NEAR Wallet Selector** | Meteor, MyNearWallet and HERE sign-in; every call is signed in the user's own wallet | [`web/src/lib/wallet.tsx`](web/src/lib/wallet.tsx) |
 | **FastNEAR RPC** | Every view the app reads | [`web/src/lib/near.ts`](web/src/lib/near.ts) |
+
+**NEAR features used, named the way the hackathon lists them:**
+- **Confidential execution (a TEE):** the enclave module runs in Intel TDX on OutLayer, its secret is released only to Nema's exact build asked for by Nema's contract, and every run is checked against its Intel quote in the browser.
+- **Account design:** the site signs calls that attach no money with a **function-call key** limited to the Nema contract (so there is no wallet pop-up for those), and asks the wallet for anything that moves NEAR. The contract lives on a **named account** (`nema-v2.testnet`), and the test funds and lender are **sub-accounts** of `nema-dev.testnet`.
+- **Not used:** NEAR Intents, Chain Signatures, chain abstraction, NEAR AI Cloud and the 1-Click Swap SDK. This entry is about confidential execution and who owns an account's keys.
 
 ---
 
