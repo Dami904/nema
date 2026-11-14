@@ -226,6 +226,8 @@ tally does this, in integers only:
 | Mean | Of the kept marks, rounded half up to the nearest **eighth** of a point (94.125, 94.25, 94.375 …), the way loans are quoted | Hides the last digits that would let marks be solved for |
 | Spread | Standard deviation of all valid marks, rounded to the nearest **quarter**, with an exact integer square root | Same |
 
+**What rounding costs a reader:** the published mean is never more than 0.0625 of a point from the exact trimmed mean, and the spread no more than about 0.125 from the exact one. Every copy says how it was computed (`method: rounded`), so no reader is given a rounded figure as an exact one.
+
 The browser repeats the same arithmetic ([`web/src/lib/consensus.ts`](web/src/lib/consensus.ts)) and checks every opened copy against the commitment on chain.
 
 | Marks | Published | The exact figures it hides |

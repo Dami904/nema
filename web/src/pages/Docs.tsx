@@ -295,7 +295,7 @@ function RoundsSection() {
         names them, so one bad fund can't spoil a round. From five funds up, the highest and lowest marks are left out of the mean (two of each
         from nine), so one fund can't drag the price. The mean is rounded to the nearest eighth of a point, the way loans are quoted, and the
         spread to the nearest quarter, all in integer arithmetic. An exact mean and spread would let two funds that share their own marks solve
-        for the other two in a four-fund round; rounded, each answer is a range about a point wide. Rounds tallied before rounding keep the exact
+        for the other two in a four-fund round; rounded, each answer is a range about a point wide. For a reader the cost is small and stated: the mean is never more than 0.0625 of a point from the exact trimmed mean, and the spread no more than about 0.125 from the exact one. Rounds tallied before rounding keep the exact
         result they were committed to.
       </p>
     </Section>
