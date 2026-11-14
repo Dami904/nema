@@ -23,15 +23,9 @@ Built for the NEAR Hackathon · Privacy & Private AI track.
 
 ## Demo video
 
-<!--
-  REPLACE THE LINE BELOW WITH THE VIDEO.
-  On GitHub: open README.md, click the pencil (Edit), delete the line below, and drag
-  the .mp4 into its place. GitHub uploads it and inserts a
-  https://github.com/user-attachments/assets/... link that plays inline here.
-  Video uploads must be under 10 MB on a free account (100 MB on a paid one); a
-  larger file can go on YouTube instead, linked from a thumbnail image.
--->
-**Demo video: coming with the final recording.** Until then, [judge it in 90 seconds](#judge-it-in-90-seconds) on the live app.
+[![Nema demo: one loan priced by five funds on NEAR testnet, 3 minutes 24 seconds](https://img.youtube.com/vi/QzmEfXt_7zY/maxresdefault.jpg)](https://youtu.be/QzmEfXt_7zY)
+
+**[Watch the demo on YouTube](https://youtu.be/QzmEfXt_7zY)** (3:24): one loan priced by five funds on NEAR testnet, from the council vote to the audit. Or [judge it in 90 seconds](#judge-it-in-90-seconds) on the live app.
 
 ---
 
