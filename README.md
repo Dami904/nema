@@ -23,7 +23,11 @@ Built for the NEAR Hackathon · Privacy & Private AI track.
 
 ## Demo video
 
-[![Nema demo: one loan priced by five funds on NEAR testnet, 3 minutes 24 seconds](https://github.com/user-attachments/assets/844a7376-d7a1-4bf7-8433-0f020b6bed27)](https://youtu.be/QzmEfXt_7zY)
+
+
+https://github.com/user-attachments/assets/8e00ec8a-1c58-4c1f-861f-5c5be43ef4c7
+
+
 
 **[Watch the demo on YouTube](https://youtu.be/QzmEfXt_7zY)** (3:24): one loan priced by five funds on NEAR testnet, from the council vote to the audit. Or [judge it in 90 seconds](#judge-it-in-90-seconds) on the live app.
 
